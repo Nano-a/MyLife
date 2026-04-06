@@ -2,9 +2,20 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { db, getProfile } from "../db";
 import type { UserProfile } from "@mylife/core";
-import { computeDailyWaterTargetMl, totalDrunkMl, hydrationLongTermScore } from "@mylife/core";
-import { todayISO } from "../lib/dateUtils";
+import {
+  computeHydrationBodyIndex,
+  hydrationBodyIndexLabel,
+  hydrationLongTermScore,
+  totalDrunkMl,
+} from "@mylife/core";
+import { dateISOFromTimestamp, todayISO } from "../lib/dateUtils";
+import {
+  buildHydrationBodyIndexSeries,
+  type HydrationByDate,
+  waterTargetForDate,
+} from "../lib/hydrationTarget";
 import { BottleFill } from "./BottleFill";
+import { BodyHydrationVisual } from "./BodyHydrationVisual";
 import { toast } from "../lib/toastStore";
 
 const QUICK_ML = [150, 250, 330, 500] as const;
@@ -17,39 +28,45 @@ export function HydrationSection() {
   const rippleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hydRow = useLiveQuery(() => db.hydrationDays.get(date), [date]);
-  const recentDays = useLiveQuery(
-    () => db.hydrationDays.orderBy("date").reverse().limit(14).toArray(), []
-  ) ?? [];
+  const hydrationRows =
+    useLiveQuery(() => db.hydrationDays.orderBy("date").reverse().limit(120).toArray(), []) ?? [];
+  const sportSessions = useLiveQuery(() => db.sportSessions.toArray(), []) ?? [];
 
   useEffect(() => {
     void getProfile().then(setProfile);
   }, []);
 
+  const hydMap: HydrationByDate = useMemo(() => {
+    const m: HydrationByDate = new Map();
+    for (const r of hydrationRows) m.set(r.date, r);
+    return m;
+  }, [hydrationRows]);
+
   const targetMl = useMemo(() => {
     if (!profile) return 2500;
-    return computeDailyWaterTargetMl(profile, {
-      activiteDuJour: profile.activiteHabituelle,
-      heuresSportModere: 0,
-      heuresSportIntense: 0,
-    });
-  }, [profile]);
+    return waterTargetForDate(profile, date, sportSessions);
+  }, [profile, date, sportSessions]);
 
   const drunk = totalDrunkMl(hydRow?.entries ?? []);
   const pct = targetMl > 0 ? Math.min(100, Math.round((drunk / targetMl) * 100)) : 0;
 
-  const longTerm = useMemo(() => {
+  const bodyIndexSeries90 = useMemo(() => {
+    if (!profile) return [];
+    return buildHydrationBodyIndexSeries(profile, hydMap, sportSessions, 90);
+  }, [profile, hydMap, sportSessions]);
+
+  const bodyIndex = useMemo(
+    () => computeHydrationBodyIndex(bodyIndexSeries90),
+    [bodyIndexSeries90]
+  );
+
+  const bodyLabel = useMemo(() => hydrationBodyIndexLabel(bodyIndex), [bodyIndex]);
+
+  const longTerm14 = useMemo(() => {
     if (!profile) return 0;
-    const dailyPct = recentDays.map((d) => {
-      const t = computeDailyWaterTargetMl(profile, {
-        activiteDuJour: profile.activiteHabituelle,
-        heuresSportModere: 0,
-        heuresSportIntense: 0,
-      });
-      const consumed = totalDrunkMl(d.entries);
-      return t > 0 ? (consumed / t) * 100 : 0;
-    });
-    return hydrationLongTermScore(dailyPct);
-  }, [recentDays, profile]);
+    const series = buildHydrationBodyIndexSeries(profile, hydMap, sportSessions, 14);
+    return hydrationLongTermScore(series);
+  }, [profile, hydMap, sportSessions]);
 
   const lastAt = hydRow?.entries.at(-1)?.at;
 
@@ -80,6 +97,11 @@ export function HydrationSection() {
     setCustomMl("");
   }
 
+  const sportTodayMin = useMemo(() => {
+    const dayS = sportSessions.filter((s) => dateISOFromTimestamp(s.debut) === date);
+    return Math.round(dayS.reduce((acc, s) => acc + (s.fin - s.debut) / 60_000, 0));
+  }, [sportSessions, date]);
+
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-elevated">
       {/* En-tête avec bouteille */}
@@ -92,20 +114,25 @@ export function HydrationSection() {
             </span>
             <span className="text-sm text-muted"> / {targetMl} ml</span>
           </div>
-          {/* Progress bar */}
+          {sportTodayMin > 0 && (
+            <p className="mt-0.5 text-xs text-muted">
+              Objectif ajusté (sport du jour : ~{sportTodayMin} min)
+            </p>
+          )}
           <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[var(--surface)]">
             <div
               className="h-full rounded-full transition-all duration-700"
               style={{
                 width: `${pct}%`,
-                background: pct >= 100
-                  ? "var(--green)"
-                  : `linear-gradient(90deg, var(--accent), #a855f7)`,
+                background:
+                  pct >= 100
+                    ? "var(--green)"
+                    : `linear-gradient(90deg, var(--accent), #a855f7)`,
               }}
             />
           </div>
           <div className="mt-1.5 flex items-center justify-between text-xs text-muted">
-            <span>{pct}% de l'objectif</span>
+            <span>{pct}% de l&apos;objectif aujourd&apos;hui</span>
             {lastAt && (
               <span>
                 Dernière gorgée{" "}
@@ -116,11 +143,29 @@ export function HydrationSection() {
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-muted">
-            Régularité 14 j : {longTerm}%
-          </p>
+          <p className="mt-1 text-xs text-muted">Moyenne sur 14 j : {longTerm14}% de l&apos;objectif</p>
         </div>
         <BottleFill percent={pct} className="shrink-0" />
+      </div>
+
+      {/* Indice « corps » + silhouette */}
+      <div className="mx-5 mt-5 rounded-2xl border border-border bg-[var(--surface)] p-4">
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Hydratation dans le temps</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              Indice calculé sur <strong>90 jours</strong> : il monte quand tu atteins souvent ton objectif
+              (poids, taille, âge, activité et sport du jour sont pris en compte). Ce n&apos;est{" "}
+              <strong>pas</strong> une mesure médicale d&apos;eau dans les organes, mais une façon de voir ta{" "}
+              <strong>régularité</strong>.
+            </p>
+            <p className="mt-3 text-sm font-medium" style={{ color: "var(--accent)" }}>
+              {bodyLabel.label}
+            </p>
+            <p className="mt-1 text-xs text-muted">{bodyLabel.detail}</p>
+          </div>
+          <BodyHydrationVisual percent={bodyIndex} className="shrink-0 self-center sm:self-start" />
+        </div>
       </div>
 
       {/* Boutons rapides */}
@@ -142,11 +187,7 @@ export function HydrationSection() {
         ))}
       </div>
 
-      {/* Saisie libre + annuler */}
-      <form
-        onSubmit={handleCustom}
-        className="flex items-center gap-2 px-5 pb-5 pt-3"
-      >
+      <form onSubmit={handleCustom} className="flex items-center gap-2 px-5 pb-5 pt-3">
         <input
           type="number"
           inputMode="numeric"

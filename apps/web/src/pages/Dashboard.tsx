@@ -1,15 +1,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getProfile } from "../db";
-import {
-  computeDailyWaterTargetMl,
-  totalDrunkMl,
-  computeDayScore,
-  type HabitCompletion,
-  type UserProfile,
-  type Habit,
-  type AgendaEvent,
-} from "@mylife/core";
+import { totalDrunkMl, computeDayScore, type HabitCompletion, type UserProfile, type Habit, type AgendaEvent } from "@mylife/core";
 import { todayISO } from "../lib/dateUtils";
+import { waterTargetForDate } from "../lib/hydrationTarget";
 import { habitsDueToday } from "../lib/habitsDue";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "../lib/toastStore";
@@ -98,15 +91,12 @@ export function Dashboard() {
   const events = useLiveQuery(() => db.events.toArray(), []) ?? [];
   const balances =
     useLiveQuery(() => db.balanceSnapshots.orderBy("date").reverse().toArray(), []) ?? [];
+  const sportSessions = useLiveQuery(() => db.sportSessions.toArray(), []) ?? [];
 
   const targetMl = useMemo(() => {
     if (!profile) return 2500;
-    return computeDailyWaterTargetMl(profile, {
-      activiteDuJour: profile.activiteHabituelle,
-      heuresSportModere: 0,
-      heuresSportIntense: 0,
-    });
-  }, [profile]);
+    return waterTargetForDate(profile, date, sportSessions);
+  }, [profile, date, sportSessions]);
 
   const drunk = totalDrunkMl(hydRow?.entries ?? []);
   const hydPct = targetMl > 0 ? Math.min(100, Math.round((drunk / targetMl) * 100)) : 0;

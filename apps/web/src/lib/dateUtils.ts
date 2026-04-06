@@ -1,9 +1,21 @@
-export function todayISO(): string {
-  const d = new Date();
+function padDatePart(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+export function dateISOFromLocalDate(d: Date): string {
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const m = padDatePart(d.getMonth() + 1);
+  const day = padDatePart(d.getDate());
   return `${y}-${m}-${day}`;
+}
+
+export function todayISO(): string {
+  return dateISOFromLocalDate(new Date());
+}
+
+/** Date locale (YYYY-MM-DD) correspondant à un instant (séance sport, etc.). */
+export function dateISOFromTimestamp(ts: number): string {
+  return dateISOFromLocalDate(new Date(ts));
 }
 
 export function formatFrDate(iso: string): string {

@@ -2,7 +2,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { db, getProfile } from "../db";
 import type { Intensity, SportSession, SportTemplate, SportType, UserProfile } from "@mylife/core";
-import { estimatedRecoveryHoursFull, recoveryPercentSinceSessionEnd } from "@mylife/core";
+import {
+  estimatedRecoveryHoursFull,
+  recoveryPercentSinceSessionEnd,
+  weeklyActivityGuideline,
+  weeklyModerateEquivalentMinutes,
+} from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
 
@@ -86,6 +91,8 @@ export function SportPage() {
           </button>
         </div>
       </header>
+
+      {profile && <WhoActivityCard profile={profile} sessions={sessions} />}
 
       {/* Récupération */}
       {last && (
@@ -192,6 +199,50 @@ export function SportPage() {
         labelRef={labelRef}
       />
       <AddTemplateModal open={tplOpen} onClose={() => setTplOpen(false)} />
+    </div>
+  );
+}
+
+/* ═══════════ Recommandation OMS (activité hebdo) ══════════════════════════ */
+function WhoActivityCard({
+  profile,
+  sessions,
+}: {
+  profile: UserProfile;
+  sessions: SportSession[];
+}) {
+  const g = weeklyActivityGuideline(profile);
+  const weekEnd = Date.now();
+  const weekStart = weekEnd - 7 * 86_400_000;
+  const done = weeklyModerateEquivalentMinutes(sessions, weekStart, weekEnd);
+  const targetMin = g.moderateMinutesWeeklyTarget;
+  const pct = targetMin > 0 ? Math.min(100, Math.round((done / targetMin) * 100)) : 0;
+
+  return (
+    <div className="rounded-2xl border border-border bg-elevated p-4">
+      <p className="text-sm font-semibold">Objectif d&apos;activité (indicatif OMS)</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted">{g.summaryFr}</p>
+      {targetMin > 0 && (
+        <>
+          <div className="mt-3 flex justify-between text-xs text-muted">
+            <span>Équivalent modéré — 7 derniers jours</span>
+            <span className="font-medium text-[var(--text)]">
+              {Math.round(done)} / {targetMin} min
+            </span>
+          </div>
+          <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-[var(--surface)]">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-700"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[0.65rem] text-muted">
+            1 min vigoureuse compte comme ~2 min modérées. Alternative : au moins{" "}
+            {g.vigorousMinutesWeeklyAlternative} min / semaine en activité vigoureuse.
+          </p>
+        </>
+      )}
+      <p className="mt-2 text-[0.65rem] text-muted">{g.sourceFr}</p>
     </div>
   );
 }

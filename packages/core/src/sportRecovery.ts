@@ -10,13 +10,15 @@ export function estimatedRecoveryHoursFull(
   dureeMinutes: number
 ): number {
   const ageFactor = profile.age < 30 ? 1 : profile.age < 50 ? 1.15 : 1.35;
+  const massFactor =
+    1 + Math.max(-0.06, Math.min(0.1, (profile.poidsKg - 70) * 0.002));
   const base =
     intensite === "faible"
       ? dureeMinutes * 0.02
       : intensite === "moderee"
         ? dureeMinutes * 0.04
         : dureeMinutes * 0.07;
-  return Math.round(base * ageFactor * 10) / 10;
+  return Math.round(base * ageFactor * massFactor * 10) / 10;
 }
 
 export function recoveryPercentSinceSessionEnd(
