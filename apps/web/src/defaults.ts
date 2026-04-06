@@ -32,4 +32,5 @@ export const defaultPrefs: AppPreferences = {
   dndPeriods: [
     { id: "dnd-nuit", label: "Nuit", start: "22:00", end: "07:00", enabled: true },
   ],
+  notifSoundId: "defaut",
 };

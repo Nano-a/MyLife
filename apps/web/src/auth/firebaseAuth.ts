@@ -8,10 +8,18 @@ import {
   type Auth,
   type User,
 } from "firebase/auth";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from "firebase/firestore";
 import { parseFirebaseEnv } from "@mylife/firebase";
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
+let firestore: Firestore | null = null;
 
 function envRecord(): Record<string, string | undefined> {
   return import.meta.env as unknown as Record<string, string | undefined>;
@@ -33,6 +41,28 @@ function getOrInitAuth(): Auth | null {
 
 export function getFirebaseAuthInstance(): Auth | null {
   return getOrInitAuth();
+}
+
+export function getFirebaseApp(): FirebaseApp | null {
+  getOrInitAuth();
+  return app;
+}
+
+/** Firestore avec cache persistant (offline-first, multi-onglets). */
+export function getFirebaseDb(): Firestore | null {
+  if (!getOrInitAuth() || !app) return null;
+  if (!firestore) {
+    try {
+      firestore = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      });
+    } catch {
+      firestore = getFirestore(app);
+    }
+  }
+  return firestore;
 }
 
 export async function signInWithGooglePopup(): Promise<

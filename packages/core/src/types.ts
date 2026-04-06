@@ -57,6 +57,8 @@ export interface AppPreferences {
   /** @deprecated — gardé pour compatibilité ascendante */
   dndStart?: string;
   dndEnd?: string;
+  /** Son des notifications navigateur */
+  notifSoundId?: "defaut" | "goutte" | "bip" | "aucun";
 }
 
 /* ══════════ HABITUDES ══════════ */

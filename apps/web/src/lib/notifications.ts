@@ -1,4 +1,5 @@
 import type { AgendaEvent, AppPreferences } from "@mylife/core";
+import { playNotificationSound } from "./playNotifSound";
 
 function timeToMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -70,6 +71,7 @@ export function tickAgendaReminders(
         typeof window !== "undefined"
           ? `${window.location.origin}${base.endsWith("/") ? base : `${base}/`}icon-192.png`
           : undefined;
+      playNotificationSound(prefs);
       new Notification(ev.titre, {
         body: `Dans ${mins} min${ev.lieu ? ` · ${ev.lieu}` : ""}`,
         tag: key,

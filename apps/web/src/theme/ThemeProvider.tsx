@@ -27,7 +27,7 @@ function applyDomTheme(p: AppPreferences) {
   root.style.setProperty("--accent", p.accentColor);
   root.dataset.font = p.fontFamily === "inter" ? "inter" : p.fontFamily;
   root.dataset.scale = p.textScale;
-  root.lang = p.language === "en" ? "en" : "fr";
+  root.lang = "fr";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

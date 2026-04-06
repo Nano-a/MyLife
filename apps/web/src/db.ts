@@ -170,3 +170,44 @@ export async function getPrefs(): Promise<AppPreferences | null> {
 export async function savePrefs(p: AppPreferences): Promise<void> {
   await db.settings.put({ key: PREFS_KEY, value: p });
 }
+
+/** Efface toutes les données locales (spec : suppression avec confirmation). */
+export async function wipeAllLocalData(): Promise<void> {
+  await db.transaction(
+    "rw",
+    [
+      db.settings,
+      db.habits,
+      db.habitCompletions,
+      db.events,
+      db.sportSessions,
+      db.sportTemplates,
+      db.transactions,
+      db.balanceSnapshots,
+      db.budgets,
+      db.subscriptions,
+      db.objectives,
+      db.noteFolders,
+      db.notes,
+      db.hydrationDays,
+      db.moodDays,
+    ],
+    async () => {
+      await db.moodDays.clear();
+      await db.hydrationDays.clear();
+      await db.notes.clear();
+      await db.noteFolders.clear();
+      await db.objectives.clear();
+      await db.subscriptions.clear();
+      await db.budgets.clear();
+      await db.balanceSnapshots.clear();
+      await db.transactions.clear();
+      await db.sportTemplates.clear();
+      await db.sportSessions.clear();
+      await db.events.clear();
+      await db.habitCompletions.clear();
+      await db.habits.clear();
+      await db.settings.clear();
+    }
+  );
+}

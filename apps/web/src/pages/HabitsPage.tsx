@@ -116,7 +116,7 @@ export function HabitsPage() {
       <HydrationSection />
 
       {/* Score + anneau */}
-      <div className="flex items-center gap-4 rounded-2xl border border-border bg-elevated p-4">
+      <div className="flex items-center gap-4 rounded-2xl elevated-surface p-4">
         <ScoreRing score={score} size={56} stroke={5} />
         <div>
           <p className="font-semibold">Score du jour</p>
@@ -125,7 +125,7 @@ export function HabitsPage() {
       </div>
 
       {/* Onglets */}
-      <div className="flex gap-1 rounded-xl border border-border bg-elevated p-1">
+      <div className="flex gap-1 rounded-xl elevated-surface p-1">
         {([["aujourdhui","Aujourd'hui"],["toutes","Toutes"],["archives","Archives"]] as [HabitTab,string][]).map(([t,l]) => (
           <button key={t} type="button" onClick={() => setTab(t)}
             className={["flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors",

@@ -6,8 +6,6 @@ import { db } from "../db";
 import type { NoteFolder, RichNote, RichNoteAttachment } from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
-import { useThemePrefs } from "../theme/ThemeProvider";
-import { t } from "../i18n/strings";
 
 /* ═══════════════════════════════════ Palettes ════════════════════════════ */
 const NOTE_COLORS = [
@@ -43,7 +41,6 @@ type Screen = "grid" | "editor";
 
 /* ═══════════════════════════════════ Page principale ═════════════════════ */
 export function NotesPage() {
-  const { prefs } = useThemePrefs();
   const allFolders = useLiveQuery(() => db.noteFolders.orderBy("createdAt").toArray(), []) ?? [];
   const allNotes   = useLiveQuery(() => db.notes.orderBy("updatedAt").reverse().toArray(), []) ?? [];
 
@@ -162,7 +159,7 @@ export function NotesPage() {
   return (
     <div className="space-y-3">
       <p className="text-center text-[0.65rem] leading-snug text-muted">
-        {t("offlineNotes", prefs.language)}
+        Données locales — tout est enregistré sur cet appareil.
       </p>
 
       {/* ── Barre de recherche proéminente ── */}
@@ -171,7 +168,7 @@ export function NotesPage() {
           🔍
         </span>
         <input
-          className="w-full rounded-2xl border border-border bg-elevated py-3.5 pl-12 pr-10 text-sm shadow-sm outline-none transition-shadow focus:border-accent focus:shadow-md"
+          className="w-full rounded-2xl elevated-surface py-3.5 pl-12 pr-10 text-sm outline-none transition-shadow focus:border-accent focus:shadow-float"
           placeholder="Rechercher dans les notes…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -224,7 +221,7 @@ export function NotesPage() {
         <button
           type="button"
           onClick={() => setFolderModalOpen(true)}
-          className="shrink-0 grid h-8 w-8 place-items-center rounded-xl border border-border bg-elevated text-sm text-muted hover:text-[var(--text)] active:scale-90"
+          className="shrink-0 grid h-8 w-8 place-items-center rounded-xl elevated-surface text-sm text-muted hover:text-[var(--text)] active:scale-90"
           title="Nouveau dossier"
           aria-label="Nouveau dossier"
         >
@@ -485,7 +482,7 @@ function FolderCard({
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-7 z-20 min-w-[130px] overflow-hidden rounded-xl border border-border bg-elevated shadow-xl">
+          <div className="absolute right-0 top-7 z-20 min-w-[130px] overflow-hidden rounded-xl elevated-surface shadow-xl">
             <button
               type="button"
               onClick={() => { onDelete(); setMenuOpen(false); }}
@@ -597,7 +594,7 @@ function NoteCard({
             onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }}
           />
           <div
-            className="absolute bottom-10 right-2 z-20 min-w-[130px] overflow-hidden rounded-xl border border-border bg-elevated shadow-xl"
+            className="absolute bottom-10 right-2 z-20 min-w-[130px] overflow-hidden rounded-xl elevated-surface shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             {[

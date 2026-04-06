@@ -38,8 +38,8 @@ export function LockScreen({ pinHash, onUnlocked }: Props) {
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-surface px-6">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-elevated p-6 shadow-xl">
-        <h1 className="text-center text-xl font-semibold">MyLife verrouillé</h1>
+      <div className="w-full max-w-sm rounded-[1.35rem] elevated-surface p-7 shadow-modal backdrop-blur-xl">
+        <h1 className="text-center text-xl font-semibold tracking-tight">MyLife verrouillé</h1>
         <p className="mt-2 text-center text-sm text-muted">
           Saisis ton code PIN pour continuer.
         </p>

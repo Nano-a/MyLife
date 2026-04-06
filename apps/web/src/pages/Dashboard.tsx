@@ -131,23 +131,23 @@ export function Dashboard() {
   return (
     <div className="space-y-5">
       {/* En-tête */}
-      <header>
-        <p className="text-sm text-muted">{greeting()},</p>
-        <h1 className="text-2xl font-bold">{profile?.prenom ?? "Bienvenue"} 👋</h1>
+      <header className="space-y-0.5">
+        <p className="text-sm font-medium text-muted">{greeting()},</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{profile?.prenom ?? "Bienvenue"} 👋</h1>
       </header>
 
       <MoodWidget />
 
       {/* Score + streak */}
       <section className="flex gap-3">
-        <div className="flex flex-1 items-center gap-3 rounded-2xl border border-border bg-elevated p-4">
+        <div className="flex flex-1 items-center gap-3 rounded-2xl elevated-surface p-4">
           <ScoreRing score={dayScore} />
           <div>
             <p className="font-semibold">Journée</p>
             <p className="text-sm text-muted">{doneCnt}/{due.length} habitudes</p>
           </div>
         </div>
-        <div className="flex w-24 flex-col items-center justify-center rounded-2xl border border-border bg-elevated p-3 text-center">
+        <div className="flex w-24 flex-col items-center justify-center rounded-2xl elevated-surface p-3 text-center">
           <span className="flame-icon text-2xl" aria-hidden>🔥</span>
           <span className="text-xl font-bold">{streak}</span>
           <span className="text-xs text-muted">jours</span>
@@ -155,7 +155,7 @@ export function Dashboard() {
       </section>
 
       {/* Hydratation — rapide */}
-      <section className="rounded-2xl border border-border bg-elevated p-4">
+      <section className="rounded-2xl elevated-surface p-4">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="font-semibold">Eau</p>
@@ -202,7 +202,7 @@ export function Dashboard() {
       </section>
 
       {/* Prochain event */}
-      <section className="rounded-2xl border border-border bg-elevated p-4">
+      <section className="rounded-2xl elevated-surface p-4">
         <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
           Prochain événement
         </p>
@@ -226,7 +226,7 @@ export function Dashboard() {
 
       {/* Finances */}
       {solde !== null && (
-        <section className="rounded-2xl border border-border bg-elevated p-4">
+        <section className="rounded-2xl elevated-surface p-4">
           <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Solde</p>
           <p className="text-2xl font-bold">{solde.toLocaleString("fr-FR")} €</p>
         </section>

@@ -50,53 +50,71 @@ export function LoginPage() {
         toast.info("Compte Google sans e-mail — connexion impossible.");
         return;
       }
-      signInGoogle(email);
+      signInGoogle(email, res.user.uid);
       navigate(from, { replace: true });
-      toast.ok("Connecté avec Google");
+      toast.ok("Connecté avec Google — synchronisation Firestore active.");
     } finally {
       setGoogleLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-surface px-6">
-      <div className="w-full max-w-sm text-center">
-        <div className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-3xl bg-accent text-4xl shadow-xl shadow-accent/30">
+    <div className="flex min-h-dvh flex-col items-center justify-center px-5 py-10 sm:px-8">
+      <div className="w-full max-w-md rounded-[1.75rem] elevated-surface px-7 py-9 text-center shadow-modal backdrop-blur-xl sm:px-10 sm:py-11">
+        <div className="mx-auto mb-5 grid h-[4.75rem] w-[4.75rem] place-items-center rounded-2xl bg-accent text-4xl shadow-float ring-1 ring-white/10">
           🌟
         </div>
         <h1 className="text-3xl font-bold tracking-tight">MyLife</h1>
-        <p className="mt-2 text-sm text-muted">
-          Habitudes, eau, sport, finances, objectifs — tout en local sur ton appareil.
+        <p className="mt-3 text-sm text-muted leading-relaxed">
+          Connexion avec Google pour la multi-appareils et la sync Firestore (spec). Mode hors-ligne
+          conservé sur chaque appareil.
         </p>
 
-        <div className="mt-10 flex flex-col gap-3">
-          <button
-            type="button"
-            className="w-full rounded-2xl bg-accent py-4 text-base font-semibold text-white shadow-lg shadow-accent/30 hover:opacity-90 active:scale-[0.98]"
-            onClick={() => {
-              signInLocal();
-              navigate(from, { replace: true });
-            }}
-          >
-            Commencer
-          </button>
-
-          {firebaseOk && (
-            <button
-              type="button"
-              disabled={googleLoading}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-border bg-elevated py-3.5 text-sm font-medium text-muted transition-all hover:text-[var(--text)] active:scale-[0.98] disabled:opacity-60"
-              onClick={() => void handleGoogle()}
-            >
-              <GoogleMark className="h-5 w-5 shrink-0" />
-              {googleLoading ? "Connexion…" : "Avec Google (optionnel)"}
-            </button>
+        <div className="mt-9 flex flex-col gap-3">
+          {firebaseOk ? (
+            <>
+              <button
+                type="button"
+                disabled={googleLoading}
+                className="btn-accent-gradient flex w-full items-center justify-center gap-3 rounded-2xl py-4 text-base font-semibold text-white active:scale-[0.98] disabled:opacity-60"
+                onClick={() => void handleGoogle()}
+              >
+                <GoogleMark className="h-6 w-6 shrink-0" />
+                {googleLoading ? "Connexion…" : "Continuer avec Google"}
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-2xl elevated-surface py-3.5 text-sm text-muted hover:text-[var(--text)] active:scale-[0.98]"
+                onClick={() => {
+                  signInLocal();
+                  navigate(from, { replace: true });
+                }}
+              >
+                Continuer sans compte (local uniquement, pas de sync cloud)
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                Firebase non configuré : ajoute <code className="text-[0.65rem]">VITE_FIREBASE_*</code> dans{" "}
+                <code className="text-[0.65rem]">apps/web/.env</code> pour activer Google + Firestore.
+              </p>
+              <button
+                type="button"
+                className="w-full rounded-2xl elevated-surface py-4 text-sm font-medium text-muted hover:text-[var(--text)] active:scale-[0.98]"
+                onClick={() => {
+                  signInLocal();
+                  navigate(from, { replace: true });
+                }}
+              >
+                Mode démo — données 100 % locales
+              </button>
+            </>
           )}
         </div>
 
         <p className="mt-5 text-xs text-muted leading-relaxed">
-          Rien à créer ni à configurer : tes notes et données restent sur ce téléphone ou cet
-          ordinateur (navigateur).
+          PIN, passkey et export JSON disponibles dans les réglages. Interface en français.
         </p>
       </div>
     </div>

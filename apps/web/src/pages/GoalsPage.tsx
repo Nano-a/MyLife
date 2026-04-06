@@ -79,7 +79,7 @@ export function GoalsPage() {
       </header>
 
       {/* Onglets */}
-      <div className="flex gap-1 rounded-xl border border-border bg-elevated p-1">
+      <div className="flex gap-1 rounded-xl elevated-surface p-1">
         {([["actif","Actifs"],["termine","Terminés"],["abandonne","Abandonnés"]] as [ObjTab,string][]).map(([t,l]) => (
           <button key={t} type="button" onClick={() => setTab(t)}
             className={["flex-1 rounded-lg py-1.5 text-sm font-medium",
@@ -122,7 +122,7 @@ function GoalCard({ goal, onOpen }: { goal: Objective; onOpen: () => void }) {
   const p = progressFor(goal);
   return (
     <li
-      className="cursor-pointer rounded-2xl border border-border bg-elevated p-4 transition-all hover:-translate-y-0.5 active:scale-[0.99]"
+      className="cursor-pointer rounded-2xl elevated-surface p-4 transition-all hover:-translate-y-0.5 active:scale-[0.99]"
       style={goal.couleur ? { borderLeftWidth: 3, borderLeftColor: goal.couleur } : {}}
       onClick={onOpen}
     >

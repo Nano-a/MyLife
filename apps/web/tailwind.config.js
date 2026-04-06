@@ -13,6 +13,11 @@ export default {
       fontFamily: {
         app: "var(--font-app)",
       },
+      boxShadow: {
+        card: "var(--shadow-card)",
+        float: "var(--shadow-float)",
+        modal: "var(--shadow-modal)",
+      },
     },
   },
   plugins: [],

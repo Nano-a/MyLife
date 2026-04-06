@@ -103,7 +103,7 @@ export function HydrationSection() {
   }, [sportSessions, date]);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-elevated">
+    <section className="overflow-hidden rounded-2xl elevated-surface">
       {/* En-tête avec bouteille */}
       <div className="flex items-center justify-between gap-4 px-5 pt-5">
         <div className="flex-1">

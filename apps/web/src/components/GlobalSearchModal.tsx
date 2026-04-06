@@ -3,8 +3,6 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../db";
 import { Modal } from "./Modal";
-import { useThemePrefs } from "../theme/ThemeProvider";
-import { t } from "../i18n/strings";
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -12,8 +10,6 @@ function stripHtml(html: string): string {
 
 export function GlobalSearchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
-  const { prefs } = useThemePrefs();
-  const lng = prefs.language;
   const [q, setQ] = useState("");
 
   const events = useLiveQuery(() => db.events.toArray(), []) ?? [];
@@ -91,18 +87,18 @@ export function GlobalSearchModal({ open, onClose }: { open: boolean; onClose: (
   }, [q, events, notes, goals, txs, habits, navigate, onClose]);
 
   return (
-    <Modal open={open} onClose={onClose} title={t("searchTitle", lng)}>
+    <Modal open={open} onClose={onClose} title="Recherche globale">
       <input
         autoFocus
         className="mb-3 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2.5 outline-none focus:border-accent"
-        placeholder={t("searchPlaceholder", lng)}
+        placeholder="Rechercher…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
       {q.trim().length < 2 ? (
         <p className="text-sm text-muted">2 caractères minimum.</p>
       ) : results.length === 0 ? (
-        <p className="text-sm text-muted">{t("noResults", lng)}</p>
+        <p className="text-sm text-muted">Aucun résultat</p>
       ) : (
         <ul className="max-h-[50vh] space-y-1 overflow-y-auto">
           {results.map((r, i) => (

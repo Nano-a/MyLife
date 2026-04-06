@@ -85,7 +85,7 @@ export function SportPage() {
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={() => setTplOpen(true)}
-            className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-muted hover:text-[var(--text)] active:scale-95">
+            className="rounded-xl elevated-surface px-3 py-2 text-sm text-muted hover:text-[var(--text)] active:scale-95">
             📋 Template
           </button>
           <button type="button"
@@ -134,7 +134,7 @@ export function SportPage() {
       )}
 
       {/* Onglets */}
-      <div className="flex gap-1 rounded-xl border border-border bg-elevated p-1">
+      <div className="flex gap-1 rounded-xl elevated-surface p-1">
         {([["historique","Historique"],["templates","Templates"],["stats","Stats"]] as [SportTab,string][]).map(([t,l]) => (
           <button key={t} type="button" onClick={() => setTab(t)}
             className={["flex-1 rounded-lg py-1.5 text-sm font-medium",
@@ -165,7 +165,7 @@ export function SportPage() {
           ) : (
             <ul className="space-y-2">
               {templates.map((t) => (
-                <li key={t.id} className="flex items-center gap-3 rounded-2xl border border-border bg-elevated p-4">
+                <li key={t.id} className="flex items-center gap-3 rounded-2xl elevated-surface p-4">
                   <span className="text-2xl">{t.icone}</span>
                   <div className="flex-1">
                     <p className="font-semibold">{t.nom}</p>
@@ -200,7 +200,7 @@ export function SportPage() {
           </div>
 
           {/* Répartition par type */}
-          <div className="rounded-2xl border border-border bg-elevated p-4">
+          <div className="rounded-2xl elevated-surface p-4">
             <p className="mb-3 font-medium">Par type d'activité</p>
             <div className="space-y-2">
               {([...byType.entries()]).map(([type, count]) => {
@@ -254,7 +254,7 @@ function WhoActivityCard({
   const pct = targetMin > 0 ? Math.min(100, Math.round((done / targetMin) * 100)) : 0;
 
   return (
-    <div className="rounded-2xl border border-border bg-elevated p-4">
+    <div className="rounded-2xl elevated-surface p-4">
       <p className="text-sm font-semibold">Objectif d&apos;activité (indicatif OMS)</p>
       <p className="mt-1 text-xs leading-relaxed text-muted">{g.summaryFr}</p>
       {targetMin > 0 && (
@@ -285,7 +285,7 @@ function WhoActivityCard({
 /* ═══════════ Récupération ═══════════════════════════════════════════════ */
 function RecoveryCard({ session, pct, hours }: { session: SportSession; pct: number; hours: number }) {
   return (
-    <div className="rounded-2xl border border-border bg-elevated p-4">
+    <div className="rounded-2xl elevated-surface p-4">
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="font-semibold">{session.libelle}</p>
@@ -320,7 +320,7 @@ function RecoveryCard({ session, pct, hours }: { session: SportSession; pct: num
 /* ═══════════ Ligne séance ════════════════════════════════════════════════ */
 function SessionRow({ session, onDelete }: { session: SportSession; onDelete: () => void }) {
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-4 py-3">
+    <li className="flex items-center gap-3 rounded-xl elevated-surface px-4 py-3">
       <span className="text-2xl shrink-0">{TYPE_EMOJI[session.type]}</span>
       <div className="flex-1 min-w-0">
         <p className="truncate font-medium">{session.libelle}</p>
@@ -355,7 +355,7 @@ function WeeklyChart({ sessions }: { sessions: SportSession[] }) {
   const maxCount = Math.max(...weeks.map((w) => w.count), 1);
 
   return (
-    <div className="rounded-2xl border border-border bg-elevated p-4">
+    <div className="rounded-2xl elevated-surface p-4">
       <p className="mb-3 font-medium">Séances / semaine (8 sem)</p>
       <div className="flex h-28 items-end gap-2">
         {weeks.map(({ label, count }) => (
@@ -375,7 +375,7 @@ function WeeklyChart({ sessions }: { sessions: SportSession[] }) {
 /* ═══════════ Stat card ══════════════════════════════════════════════════ */
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-elevated p-3 text-center">
+    <div className="rounded-2xl elevated-surface p-3 text-center">
       <p className="text-xl font-bold">{value}</p>
       <p className="text-xs text-muted">{label}</p>
     </div>

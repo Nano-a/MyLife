@@ -3,15 +3,12 @@ import { useEffect, useState } from "react";
 import { db } from "../db";
 import type { MoodDay } from "@mylife/core";
 import { todayISO } from "../lib/dateUtils";
-import { useThemePrefs } from "../theme/ThemeProvider";
-import { t } from "../i18n/strings";
 import { toast } from "../lib/toastStore";
 
 const SCORES = [1, 2, 3, 4, 5] as const;
 
 export function MoodWidget() {
   const date = todayISO();
-  const { prefs } = useThemePrefs();
   const row = useLiveQuery(() => db.moodDays.get(date), [date]);
   const [note, setNote] = useState(row?.note ?? "");
 
@@ -31,9 +28,9 @@ export function MoodWidget() {
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-elevated p-4">
+    <section className="rounded-2xl elevated-surface p-4">
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
-        {t("moodToday", prefs.language)}
+        Humeur du jour
       </p>
       <div className="flex flex-wrap gap-2">
         {SCORES.map((s) => (
@@ -53,7 +50,7 @@ export function MoodWidget() {
       </div>
       <input
         className="mt-3 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-accent"
-        placeholder={t("moodNote", prefs.language)}
+        placeholder="Note (optionnel)"
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />

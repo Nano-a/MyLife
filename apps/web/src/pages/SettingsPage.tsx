@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useThemePrefs } from "../theme/ThemeProvider";
-import { getProfile, saveProfile } from "../db";
-import type { AppLanguage, UserProfile, ThemeId, ActivityLevel, Sex, DndPeriod } from "@mylife/core";
+import { getProfile, saveProfile, wipeAllLocalData } from "../db";
+import { ensureSeedData } from "../initDb";
+import type { UserProfile, ThemeId, ActivityLevel, Sex, DndPeriod } from "@mylife/core";
 import { profileBmi } from "@mylife/core";
 import { hashPin } from "../lib/pin";
 import { useSessionStore } from "../auth/sessionStore";
@@ -76,7 +77,7 @@ export function SettingsPage() {
         <p className="text-sm text-muted">Profil, thème, sécurité, notifications.</p>
       </header>
 
-      <section className="space-y-3 rounded-2xl border border-border bg-elevated p-4">
+      <section className="space-y-3 rounded-2xl elevated-surface p-4">
         <h2 className="font-semibold">Données & synchronisation</h2>
         <p className="text-sm text-muted leading-relaxed">{getCloudSyncHint()}</p>
         <div className="flex flex-wrap gap-2">
@@ -139,6 +140,35 @@ export function SettingsPage() {
         >
           Demander la permission notifications (navigateur)
         </button>
+        <button
+          type="button"
+          className="w-full rounded-xl border border-border py-2 text-sm text-muted hover:border-accent hover:text-[var(--text)]"
+          onClick={() =>
+            window.open("https://drive.google.com/drive/my-drive", "_blank", "noopener,noreferrer")
+          }
+        >
+          Ouvrir Google Drive — dépose y ta sauvegarde JSON (sauvegarde manuelle)
+        </button>
+        <button
+          type="button"
+          className="w-full rounded-xl border border-[var(--red)]/40 py-2 text-sm text-[var(--red)] hover:bg-[var(--red)]/10"
+          onClick={() =>
+            void (async () => {
+              if (
+                !confirm(
+                  "Supprimer TOUTES les données MyLife sur cet appareil ? Irréversible. Exporte un JSON avant si besoin."
+                )
+              )
+                return;
+              await wipeAllLocalData();
+              await ensureSeedData();
+              toast.ok("Données effacées — rechargement");
+              window.setTimeout(() => window.location.reload(), 400);
+            })()
+          }
+        >
+          Supprimer toutes les données locales
+        </button>
       </section>
 
       <section className="space-y-3">
@@ -148,7 +178,7 @@ export function SettingsPage() {
             <button
               type="button"
               onClick={openProfileEdit}
-              className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-muted hover:border-accent hover:text-accent active:scale-95"
+              className="rounded-xl elevated-surface px-3 py-1.5 text-xs font-medium text-muted hover:border-accent hover:text-accent active:scale-95"
             >
               Modifier
             </button>
@@ -160,7 +190,7 @@ export function SettingsPage() {
         ) : (
           <form
             onSubmit={(e) => void saveProfil(e)}
-            className="space-y-3 rounded-2xl border border-border bg-elevated p-4"
+            className="space-y-3 rounded-2xl elevated-surface p-4"
           >
             <p className="text-xs text-muted">
               Ajuste tes informations puis valide pour mettre à jour ta carte.
@@ -258,17 +288,9 @@ export function SettingsPage() {
         )}
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-border bg-elevated p-4">
+      <section className="space-y-3 rounded-2xl elevated-surface p-4">
         <h2 className="font-semibold">Apparence</h2>
-        <label className="text-xs text-muted">Langue</label>
-        <select
-          className="w-full rounded-xl border border-border bg-surface px-3 py-2"
-          value={prefs.language ?? "fr"}
-          onChange={(e) => void setPrefs({ language: e.target.value as AppLanguage })}
-        >
-          <option value="fr">Français</option>
-          <option value="en">English</option>
-        </select>
+        <p className="text-xs text-muted">Interface en français (spec MyLife).</p>
         <label className="text-xs text-muted">Nom de l’app</label>
         <input
           className="w-full rounded-xl border border-border bg-surface px-3 py-2"
@@ -324,7 +346,7 @@ export function SettingsPage() {
 
       <NotifScheduleSection />
 
-      <section className="space-y-3 rounded-2xl border border-border bg-elevated p-4">
+      <section className="space-y-3 rounded-2xl elevated-surface p-4">
         <h2 className="font-semibold">Sécurité</h2>
         <p className="text-sm text-muted">
           Compte :{" "}
@@ -418,7 +440,7 @@ export function SettingsPage() {
         </label>
       </section>
 
-      <section className="rounded-2xl border border-border bg-elevated p-4">
+      <section className="rounded-2xl elevated-surface p-4">
         <h2 className="font-semibold">Compte</h2>
         <button
           type="button"
@@ -592,8 +614,25 @@ function NotifScheduleSection() {
   }
 
   return (
-    <section className="space-y-5 rounded-2xl border border-border bg-elevated p-4">
+    <section className="space-y-5 rounded-2xl elevated-surface p-4">
       <h2 className="font-semibold">Notifications</h2>
+
+      <Field label="Son des notifications (navigateur)">
+        <select
+          className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm"
+          value={prefs.notifSoundId ?? "defaut"}
+          onChange={(e) =>
+            void setPrefs({
+              notifSoundId: e.target.value as NonNullable<typeof prefs.notifSoundId>,
+            })
+          }
+        >
+          <option value="defaut">Défaut</option>
+          <option value="goutte">Goutte d’eau (aigu)</option>
+          <option value="bip">Bip court</option>
+          <option value="aucun">Silence</option>
+        </select>
+      </Field>
 
       {/* ── 1. Types de notifications ── */}
       <div className="space-y-1">
@@ -692,7 +731,7 @@ function NotifScheduleSection() {
             <input
               autoFocus
               required
-              className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
+              className="w-full rounded-lg elevated-surface px-3 py-2 text-sm outline-none focus:border-accent"
               placeholder="Nom de la période (ex. Réunion, Repas, Sieste…)"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
@@ -702,7 +741,7 @@ function NotifScheduleSection() {
                 <p className="mb-1 text-xs text-muted">De</p>
                 <input
                   type="time"
-                  className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm"
+                  className="w-full rounded-lg elevated-surface px-2 py-1.5 text-sm"
                   value={newStart}
                   onChange={(e) => setNewStart(e.target.value)}
                 />
@@ -711,7 +750,7 @@ function NotifScheduleSection() {
                 <p className="mb-1 text-xs text-muted">À</p>
                 <input
                   type="time"
-                  className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm"
+                  className="w-full rounded-lg elevated-surface px-2 py-1.5 text-sm"
                   value={newEnd}
                   onChange={(e) => setNewEnd(e.target.value)}
                 />

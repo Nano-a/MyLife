@@ -5,6 +5,11 @@ import type { AgendaEvent, EventCategory, RecurrenceType } from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
 import { buildPrintableAgendaHtml, downloadAgendaCsv, printAgendaWindow } from "../lib/agendaExport";
+import {
+  downloadAgendaPdf,
+  downloadAgendaXlsx,
+  type AgendaExportPeriod,
+} from "../lib/exportReports";
 
 type View = "jour" | "semaine" | "mois" | "annee";
 
@@ -99,6 +104,7 @@ export function AgendaPage() {
   const [refDate, setRef] = useState(() => new Date());
   const [addOpen, setAddOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<AgendaEvent | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
   const rawEvents = useLiveQuery(() => db.events.orderBy("debut").toArray(), []) ?? [];
@@ -154,33 +160,40 @@ export function AgendaPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => navigate(-1)}
-            className="grid h-8 w-8 place-items-center rounded-full border border-border bg-elevated hover:bg-[var(--elevated2)] active:scale-95">
+            className="grid h-8 w-8 place-items-center rounded-full elevated-surface hover:bg-[var(--elevated2)] active:scale-95">
             ‹
           </button>
           <h1 className="text-base font-semibold">{headerLabel}</h1>
           <button type="button" onClick={() => navigate(1)}
-            className="grid h-8 w-8 place-items-center rounded-full border border-border bg-elevated hover:bg-[var(--elevated2)] active:scale-95">
+            className="grid h-8 w-8 place-items-center rounded-full elevated-surface hover:bg-[var(--elevated2)] active:scale-95">
             ›
           </button>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setRef(new Date())}
-            className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95">
+            className="rounded-xl elevated-surface px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95">
             Aujourd'hui
           </button>
           <button
             type="button"
             onClick={() => downloadAgendaCsv(rawEvents, `mylife-agenda-${new Date().toISOString().slice(0, 10)}.csv`)}
-            className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+            className="rounded-xl elevated-surface px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95"
           >
             CSV
           </button>
           <button
             type="button"
             onClick={() => printAgendaWindow("Agenda MyLife", buildPrintableAgendaHtml(rawEvents))}
-            className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+            className="rounded-xl elevated-surface px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95"
           >
             Imprimer
+          </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="rounded-xl elevated-surface px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+          >
+            PDF / Excel
           </button>
           <button
             type="button"
@@ -194,7 +207,7 @@ export function AgendaPage() {
       </header>
 
       {/* Sélecteur de vue */}
-      <div className="flex gap-1 rounded-xl border border-border bg-elevated p-1">
+      <div className="flex gap-1 rounded-xl elevated-surface p-1">
         {(
           [
             ["jour", "jour"],
@@ -251,7 +264,7 @@ export function AgendaPage() {
               <p className="mt-2 text-sm text-muted">Aucun événement cette année</p>
             </div>
           ) : (
-            <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-border bg-elevated p-3 text-sm">
+            <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl elevated-surface p-3 text-sm">
               {sortedEvents.slice(0, 80).map((e) => (
                 <li key={e.id}>
                   <button type="button" className="w-full truncate rounded-lg px-2 py-1 text-left hover:bg-[var(--surface)]" onClick={() => setEditEvent(e)}>
@@ -286,6 +299,74 @@ export function AgendaPage() {
           onDelete={() => { void deleteEvent(editEvent); setEditEvent(null); }}
         />
       )}
+
+      <Modal open={exportOpen} onClose={() => setExportOpen(false)} title="Exporter l’agenda (PDF / Excel)">
+        <AgendaExportPanel events={rawEvents} refDate={refDate} onClose={() => setExportOpen(false)} />
+      </Modal>
+    </div>
+  );
+}
+
+function AgendaExportPanel({
+  events,
+  refDate,
+  onClose,
+}: {
+  events: AgendaEvent[];
+  refDate: Date;
+  onClose: () => void;
+}) {
+  const [period, setPeriod] = useState<AgendaExportPeriod>("mois");
+
+  function baseName() {
+    return `mylife-agenda-${period}-${refDate.toISOString().slice(0, 10)}`;
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted">
+        Choix de période (spec) : jour, semaine, mois, trimestre, semestre ou année — export PDF lisible ou tableur
+        .xlsx.
+      </p>
+      <div>
+        <label className="text-xs text-muted">Période</label>
+        <select
+          className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value as AgendaExportPeriod)}
+        >
+          <option value="jour">Jour</option>
+          <option value="semaine">Semaine</option>
+          <option value="mois">Mois</option>
+          <option value="trimestre">Trimestre</option>
+          <option value="semestre">Semestre</option>
+          <option value="annee">Année</option>
+        </select>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-white active:scale-[0.99]"
+          onClick={() => {
+            downloadAgendaPdf(events, period, refDate, `${baseName()}.pdf`);
+            toast.ok("PDF téléchargé");
+            onClose();
+          }}
+        >
+          Télécharger PDF
+        </button>
+        <button
+          type="button"
+          className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium active:scale-[0.99]"
+          onClick={() => {
+            downloadAgendaXlsx(events, period, refDate, `${baseName()}.xlsx`);
+            toast.ok("Fichier Excel téléchargé");
+            onClose();
+          }}
+        >
+          Télécharger Excel
+        </button>
+      </div>
     </div>
   );
 }
@@ -311,7 +392,7 @@ function YearView({
             key={m}
             type="button"
             onClick={() => onPickMonth(m)}
-            className="rounded-xl border border-border bg-elevated p-3 text-center transition-colors hover:border-accent"
+            className="rounded-xl elevated-surface p-3 text-center transition-colors hover:border-accent"
           >
             <p className="text-xs capitalize text-muted">
               {new Date(year, m).toLocaleDateString("fr-FR", { month: "short" })}

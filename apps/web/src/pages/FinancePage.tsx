@@ -16,6 +16,7 @@ import {
 } from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
+import { downloadFinanceReportPdf, downloadFinanceReportXlsx } from "../lib/exportReports";
 
 /* ─── Constantes ───────────────────────────────────────────────────────── */
 const CAT_DEPENSE  = ["alimentation","loisirs","transport","abonnement","soin","vêtements","logement","autre"];
@@ -78,6 +79,21 @@ export function FinancePage() {
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-chartMonths);
   }, [txs, chartMonths]);
 
+  /** Double courbe : solde relevé vs solde « sans superflus » (spec). */
+  const balanceDualSeries = useMemo(() => {
+    const ord = [...snaps].sort((a, b) => a.date.localeCompare(b.date));
+    const superfluCumulJusque = (dateIso: string) =>
+      txs
+        .filter((t) => t.type === "depense" && t.superflue && t.date <= dateIso)
+        .reduce((s, t) => s + t.montant, 0);
+    return ord.map((s) => ({
+      date: s.date,
+      label: s.date.slice(5),
+      reel: s.solde,
+      parfait: s.solde + superfluCumulJusque(s.date),
+    }));
+  }, [snaps, txs]);
+
   const abonMensuel = useMemo(() => {
     const [ys, ms] = currentMonth.split("-").map(Number);
     return subs.reduce((s, sub) => s + subscriptionAmountForMonth(sub, ys!, ms! - 1), 0);
@@ -121,13 +137,33 @@ export function FinancePage() {
       {/* En-tête */}
       <header className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Finances</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setSoldeOpen(true)}
-            className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+            className="rounded-xl elevated-surface px-3 py-2 text-sm text-muted hover:text-[var(--text)] active:scale-95"
           >
             Solde
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              downloadFinanceReportPdf(txs, snaps, `mylife-finances-${new Date().toISOString().slice(0, 10)}.pdf`);
+              toast.ok("Rapport PDF téléchargé");
+            }}
+            className="rounded-xl elevated-surface px-3 py-2 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+          >
+            Rapport PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              downloadFinanceReportXlsx(txs, `mylife-finances-${new Date().toISOString().slice(0, 10)}.xlsx`);
+              toast.ok("Excel téléchargé");
+            }}
+            className="rounded-xl elevated-surface px-3 py-2 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+          >
+            Excel
           </button>
           <button
             type="button"
@@ -148,9 +184,20 @@ export function FinancePage() {
         <KpiCard label="Revenus / mois"  value={`${revMois.toLocaleString("fr-FR")} €`} color="var(--green)" />
       </div>
 
+      {/* Double courbe soldes (spec) */}
+      {balanceDualSeries.length >= 2 && (
+        <div className="rounded-2xl elevated-surface p-4">
+          <p className="mb-2 text-sm font-semibold">Solde relevé vs sans superflus</p>
+          <p className="mb-3 text-xs text-muted">
+            Ligne bleue : solde saisi · ligne verte pointillée : même solde + dépenses superflues cumulées jusqu’à cette date
+          </p>
+          <BalanceDualChart data={balanceDualSeries} />
+        </div>
+      )}
+
       {/* Graphe */}
       {byMonth.length > 0 && (
-        <div className="rounded-2xl border border-border bg-elevated p-4">
+        <div className="rounded-2xl elevated-surface p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold">Historique mensuel</p>
             <div className="flex gap-1 rounded-lg border border-border p-0.5 text-xs">
@@ -191,7 +238,7 @@ export function FinancePage() {
       )}
 
       {/* Onglets */}
-      <div className="flex gap-1 rounded-xl border border-border bg-elevated p-1">
+      <div className="flex gap-1 rounded-xl elevated-surface p-1">
         {([["transactions","Transactions"],["budgets","Budgets"],["abonnements","Abonnements"]] as [Tab,string][]).map(([t,l]) => (
           <button
             key={t}
@@ -211,7 +258,7 @@ export function FinancePage() {
           {/* Filtres */}
           <div className="flex flex-wrap gap-2">
             <select
-              className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm"
+              className="rounded-xl elevated-surface px-3 py-1.5 text-sm"
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as FinanceTxType | "")}
             >
@@ -221,7 +268,7 @@ export function FinancePage() {
               ))}
             </select>
             <select
-              className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm"
+              className="rounded-xl elevated-surface px-3 py-1.5 text-sm"
               value={filterCat}
               onChange={(e) => setFilterCat(e.target.value)}
             >
@@ -271,7 +318,7 @@ export function FinancePage() {
                 const pct   = b.plafondMensuel > 0 ? Math.min(100, Math.round((spent / b.plafondMensuel) * 100)) : 0;
                 const over  = spent > b.plafondMensuel;
                 return (
-                  <li key={b.id} className="rounded-2xl border border-border bg-elevated p-4">
+                  <li key={b.id} className="rounded-2xl elevated-surface p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <span className="h-3 w-3 rounded-full" style={{ background: b.couleur }} />
@@ -336,7 +383,7 @@ export function FinancePage() {
               {subs.map((sub) => {
                 const next = nextChargeDate(sub);
                 return (
-                  <li key={sub.id} className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-4 py-3">
+                  <li key={sub.id} className="flex items-center gap-3 rounded-xl elevated-surface px-4 py-3">
                     <span className="text-xl">🔄</span>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{sub.libelle}</p>
@@ -372,9 +419,54 @@ export function FinancePage() {
 }
 
 /* ─── Composants utilitaires ────────────────────────────────────────────── */
+type BalanceDualPoint = { date: string; label: string; reel: number; parfait: number };
+
+function BalanceDualChart({ data }: { data: BalanceDualPoint[] }) {
+  const w = 320;
+  const h = 140;
+  const padL = 36;
+  const padR = 8;
+  const padT = 22;
+  const padB = 24;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+  const minY = Math.min(...data.map((d) => Math.min(d.reel, d.parfait)));
+  const maxY = Math.max(...data.map((d) => Math.max(d.reel, d.parfait)));
+  const span = maxY - minY || 1;
+  const n = data.length;
+  const xAt = (i: number) => padL + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+  const yAt = (v: number) => padT + innerH - ((v - minY) / span) * innerH;
+  const pathReel = data.map((d, i) => `${i === 0 ? "M" : "L"} ${xAt(i).toFixed(1)} ${yAt(d.reel).toFixed(1)}`).join(" ");
+  const pathParfait = data.map((d, i) => `${i === 0 ? "M" : "L"} ${xAt(i).toFixed(1)} ${yAt(d.parfait).toFixed(1)}`).join(" ");
+  const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((i, j, a) => a.indexOf(i) === j);
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-h-44 text-[var(--muted)]" aria-hidden>
+      <text x={padL} y={14} className="fill-current text-[9px]">
+        {minY.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} – {maxY.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
+      </text>
+      {tickIdx.map((i) => (
+        <text key={data[i]!.date} x={xAt(i)} y={h - 6} textAnchor="middle" className="fill-current text-[8px]">
+          {data[i]!.label}
+        </text>
+      ))}
+      <path d={pathReel} fill="none" stroke="#2563eb" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={pathParfait}
+        fill="none"
+        stroke="#059669"
+        strokeWidth={2}
+        strokeDasharray="5 4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-elevated p-3">
+    <div className="rounded-2xl elevated-surface p-3">
       <p className="text-xs text-muted">{label}</p>
       <p className="mt-1 text-lg font-bold truncate" style={color ? { color } : {}}>
         {value}
@@ -394,7 +486,7 @@ function EmptyState({ icon, msg }: { icon: string; msg: string }) {
 
 function TxRow({ tx, onDelete }: { tx: FinanceTransaction; onDelete: () => void }) {
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-4 py-3">
+    <li className="flex items-center gap-3 rounded-xl elevated-surface px-4 py-3">
       <span className="text-xl shrink-0">{EMOJI_TYPE[tx.type]}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
