@@ -2,40 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Tokens (UI type « app design » : profondeur, rayons, dégradés) ─── */
+/* ─── Tokens — base sombre type Kimi / LifeTrack (PWA suivi de vie) ─── */
 :root {
-  --surface: #0a0a10;
-  --elevated: #14141c;
-  --elevated2: #1b1b26;
-  --muted: #9494a8;
+  --surface: #000000;
+  --elevated: #141414;
+  --elevated2: #1a1a1a;
+  --muted: #9ca3af;
   --accent: #7c3aed;
   --accent-dim: rgba(124, 58, 237, 0.2);
   --border: rgba(255, 255, 255, 0.07);
-  --text: #f6f6fa;
+  --text: #fafafa;
   --green: #22c55e;
   --red: #ef4444;
-  --font-app: "Inter", system-ui, sans-serif;
+  --font-app: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --text-scale: 1;
   --radius-sm: 0.75rem;
-  --radius: 1rem; /* alias sémantique général */
+  --radius: 1rem;
   --radius-lg: 1.25rem;
   --radius-xl: 1.625rem;
   --shadow-card: 0 4px 28px -8px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --shadow-float: 0 14px 44px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-modal: 0 22px 64px -18px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.07);
-  --app-glow-a: color-mix(in srgb, var(--accent) 22%, transparent);
-  --app-glow-b: color-mix(in srgb, var(--accent) 9%, transparent);
-  /* Dock FAB style météo / bien-être */
-  --fab-cyan: #22d3ee;
-  --fab-cyan-deep: #06b6d4;
-  --fab-glow: rgba(34, 211, 238, 0.45);
-  --nav-glass: color-mix(in srgb, var(--elevated) 72%, transparent);
+  --app-glow-a: color-mix(in srgb, hsl(25 95% 53%) 18%, transparent);
+  --app-glow-b: color-mix(in srgb, hsl(262 83% 58%) 12%, transparent);
+  /* Gradients Kimi (composantes HSL pour hsl()) */
+  --gradient-orange: 25 95% 53%;
+  --gradient-purple: 262 83% 58%;
+  --gradient-blue: 217 91% 60%;
+  --gradient-green: 142 71% 45%;
+  /* Dock FAB — halo orange / violet comme maquette Kimi */
+  --fab-cyan: hsl(25 95% 53%);
+  --fab-cyan-deep: hsl(262 83% 58%);
+  --fab-glow: rgba(249, 115, 22, 0.45);
+  --nav-glass: rgba(20, 20, 20, 0.85);
 }
 
 html[data-theme="light"] {
-  --fab-cyan: #0891b2;
-  --fab-cyan-deep: #0e7490;
-  --fab-glow: rgba(8, 145, 178, 0.35);
+  --fab-cyan: hsl(25 95% 48%);
+  --fab-cyan-deep: hsl(262 83% 52%);
+  --fab-glow: rgba(124, 58, 237, 0.35);
   --nav-glass: color-mix(in srgb, var(--elevated) 88%, transparent);
   --surface: #ececf4;
   --elevated: #ffffff;
@@ -87,6 +92,13 @@ body {
 }
 #root { min-height: 100dvh; }
 
+/* Fond plein noir type maquette Kimi (thèmes sombres) */
+html[data-theme="dark"] body,
+html[data-theme="amoled"] body {
+  background-image: none;
+  background-color: var(--surface);
+}
+
 /* Cartes / surfaces élevées — ombre + bordure douce (utilitaire Tailwind `elevated-surface`) */
 @layer components {
   .elevated-surface {
@@ -120,15 +132,15 @@ body {
     border-radius: 9999px;
     border: none;
     cursor: pointer;
-    color: #042f2e;
+    color: #fff;
     font-size: 1.75rem;
     font-weight: 300;
     line-height: 1;
-    background: linear-gradient(145deg, var(--fab-cyan), var(--fab-cyan-deep));
+    background: linear-gradient(135deg, var(--fab-cyan), var(--fab-cyan-deep));
     box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--fab-cyan) 28%, transparent),
+      0 0 0 4px color-mix(in srgb, hsl(var(--gradient-orange)) 35%, transparent),
       0 10px 36px -4px var(--fab-glow),
-      0 4px 16px rgba(0, 0, 0, 0.35);
+      0 4px 16px rgba(0, 0, 0, 0.45);
     transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
   }
   .nav-dock-fab:hover {
@@ -136,9 +148,6 @@ body {
   }
   .nav-dock-fab:active {
     transform: scale(0.94);
-  }
-  html[data-theme="light"] .nav-dock-fab {
-    color: #fff;
   }
 }
 
@@ -149,6 +158,72 @@ body {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* ─── Utilitaires design Kimi / LifeTrack (extrait agent) ─── */
+@layer utilities {
+  .gradient-text {
+    background-image: linear-gradient(135deg, hsl(var(--gradient-orange)), hsl(var(--gradient-purple)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .gradient-ring {
+    background: conic-gradient(
+      from 0deg,
+      hsl(var(--gradient-orange)),
+      hsl(var(--gradient-purple)),
+      hsl(var(--gradient-blue)),
+      hsl(var(--gradient-green)),
+      hsl(var(--gradient-orange))
+    );
+  }
+
+  .kimi-glass-card {
+    @apply border border-white/5 bg-white/[0.06] backdrop-blur-xl;
+  }
+
+  .hover-lift {
+    @apply transition-all duration-300 ease-out;
+  }
+  .hover-lift:hover {
+    @apply -translate-y-1 shadow-xl;
+  }
+
+  .icon-agenda { @apply bg-orange-500/20 text-orange-400; }
+  .icon-habitudes { @apply bg-green-500/20 text-green-400; }
+  .icon-sport { @apply bg-blue-500/20 text-blue-400; }
+  .icon-hydratation { @apply bg-cyan-500/20 text-cyan-400; }
+  .icon-humeur { @apply bg-purple-500/20 text-purple-400; }
+  .icon-finances { @apply bg-emerald-500/20 text-emerald-400; }
+  .icon-objectifs { @apply bg-violet-500/20 text-violet-400; }
+  .icon-notes { @apply bg-amber-500/20 text-amber-400; }
+}
+
+html[data-theme="light"] .kimi-glass-card {
+  border-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* Texte dashboard Kimi (lisible clair / sombre) */
+.text-kimi-ink {
+  color: #fafafa;
+}
+html[data-theme="light"] .text-kimi-ink {
+  color: #18181b;
+}
+.text-kimi-muted {
+  color: rgba(255, 255, 255, 0.55);
+}
+html[data-theme="light"] .text-kimi-muted {
+  color: rgba(24, 24, 27, 0.65);
+}
+.text-kimi-soft {
+  color: rgba(255, 255, 255, 0.45);
+}
+html[data-theme="light"] .text-kimi-soft {
+  color: rgba(24, 24, 27, 0.5);
 }
 
 /* Bouton principal avec léger dégradé (style apps « premium ») */

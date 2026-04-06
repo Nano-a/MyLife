@@ -29,6 +29,8 @@ export function AppShell() {
   const location = useLocation();
   const prefsRow = useLiveQuery(() => db.settings.get("prefs"), []);
   const prefs = prefsRow?.value as AppPreferences | undefined;
+  const { prefs: themePrefs } = useThemePrefs();
+  const isLightShell = themePrefs.theme === "light";
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -76,7 +78,12 @@ export function AppShell() {
   const showOnboarding = prefs && !prefs.onboardingCompleted;
 
   return (
-    <div className="flex min-h-dvh flex-col pb-[calc(6.75rem+env(safe-area-inset-bottom))]">
+    <div
+      className={[
+        "flex min-h-dvh flex-col pb-[calc(6.75rem+env(safe-area-inset-bottom))]",
+        isLightShell ? "bg-zinc-50 text-zinc-900" : "bg-black text-zinc-100",
+      ].join(" ")}
+    >
       <a
         href="#main-content"
         className="pointer-events-none fixed left-4 top-4 z-[100] -translate-y-[200%] rounded-xl bg-accent px-4 py-2 text-sm text-white opacity-0 shadow-lg transition-all focus:pointer-events-auto focus:translate-y-0 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/80"
@@ -86,7 +93,7 @@ export function AppShell() {
       <button
         type="button"
         onClick={() => setSearchOpen(true)}
-        className="fixed right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 grid h-11 w-11 place-items-center rounded-full border border-[var(--border)] bg-elevated/88 text-lg shadow-float backdrop-blur-xl hover:border-accent hover:shadow-card active:scale-95"
+        className="fixed right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-white/5 text-lg shadow-lg backdrop-blur-xl hover:border-orange-400/40 hover:bg-white/10 active:scale-95 [html[data-theme=light]_&]:border-black/10 [html[data-theme=light]_&]:bg-white [html[data-theme=light]_&]:shadow-md"
         aria-label="Recherche globale"
       >
         🔍

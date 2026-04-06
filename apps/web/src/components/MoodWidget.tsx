@@ -28,8 +28,8 @@ export function MoodWidget() {
   }
 
   return (
-    <section className="glass-panel p-4">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+    <section className="p-4">
+      <p className="text-kimi-muted mb-2 text-xs font-semibold uppercase tracking-wider">
         Humeur du jour
       </p>
       <div className="flex flex-wrap gap-2">
@@ -41,8 +41,8 @@ export function MoodWidget() {
             className={[
               "h-10 w-10 rounded-xl border text-lg font-bold transition-colors",
               row?.score === s
-                ? "border-[var(--fab-cyan)] bg-[color-mix(in_srgb,var(--fab-cyan)_35%,transparent)] text-[var(--text)] shadow-[0_0_16px_color-mix(in_srgb,var(--fab-cyan)_25%,transparent)]"
-                : "border-white/10 bg-[color-mix(in_srgb,var(--surface)_50%,transparent)] backdrop-blur-sm",
+                ? "border-orange-400 bg-orange-500/25 text-kimi-ink shadow-[0_0_16px_rgba(249,115,22,0.35)]"
+                : "border-white/10 bg-white/5 text-kimi-ink backdrop-blur-sm [html[data-theme=light]_&]:border-black/10 [html[data-theme=light]_&]:bg-black/5",
             ].join(" ")}
             aria-label={`Humeur ${s} sur 5`}
           >
@@ -51,7 +51,7 @@ export function MoodWidget() {
         ))}
       </div>
       <input
-        className="mt-3 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-accent"
+        className="text-kimi-ink mt-3 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none focus:border-orange-400/50 [html[data-theme=light]_&]:border-black/10 [html[data-theme=light]_&]:bg-white/60"
         placeholder="Note (optionnel)"
         value={note}
         onChange={(e) => setNote(e.target.value)}
