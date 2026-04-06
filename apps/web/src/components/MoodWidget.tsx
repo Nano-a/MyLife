@@ -28,8 +28,8 @@ export function MoodWidget() {
   }
 
   return (
-    <section className="rounded-2xl elevated-surface p-4">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+    <section className="glass-panel p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
         Humeur du jour
       </p>
       <div className="flex flex-wrap gap-2">
@@ -40,7 +40,9 @@ export function MoodWidget() {
             onClick={() => void setMood(s)}
             className={[
               "h-10 w-10 rounded-xl border text-lg font-bold transition-colors",
-              row?.score === s ? "border-accent bg-accent text-white" : "border-border bg-[var(--surface)]",
+              row?.score === s
+                ? "border-[var(--fab-cyan)] bg-[color-mix(in_srgb,var(--fab-cyan)_35%,transparent)] text-[var(--text)] shadow-[0_0_16px_color-mix(in_srgb,var(--fab-cyan)_25%,transparent)]"
+                : "border-white/10 bg-[color-mix(in_srgb,var(--surface)_50%,transparent)] backdrop-blur-sm",
             ].join(" ")}
             aria-label={`Humeur ${s} sur 5`}
           >

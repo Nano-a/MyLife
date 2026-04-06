@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 type Props = {
@@ -6,9 +6,12 @@ type Props = {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /** Pour aria-controls (ex. bouton FAB) */
+  contentId?: string;
 };
 
-export function Modal({ open, onClose, title, children }: Props) {
+export function Modal({ open, onClose, title, children, contentId = "mylife-modal-panel" }: Props) {
+  const titleId = useId();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -24,11 +27,17 @@ export function Modal({ open, onClose, title, children }: Props) {
       onClick={onClose}
     >
       <div
+        id={contentId}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="modal-sheet w-full max-w-lg rounded-t-[1.75rem] elevated-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-modal backdrop-blur-xl sm:rounded-[1.75rem] sm:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold tracking-tight">
+            {title}
+          </h2>
           <button
             type="button"
             onClick={onClose}

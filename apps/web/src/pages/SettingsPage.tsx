@@ -7,6 +7,7 @@ import { profileBmi } from "@mylife/core";
 import { hashPin } from "../lib/pin";
 import { useSessionStore } from "../auth/sessionStore";
 import { signOutFirebaseUser } from "../auth/firebaseAuth";
+import { stopFirestoreDexieSync } from "../sync/firestoreDexieSync";
 import { defaultProfile } from "../defaults";
 import { toast } from "../lib/toastStore";
 import { exportDatabaseJson, importDatabaseJson } from "../lib/backup";
@@ -149,26 +150,44 @@ export function SettingsPage() {
         >
           Ouvrir Google Drive — dépose y ta sauvegarde JSON (sauvegarde manuelle)
         </button>
-        <button
-          type="button"
-          className="w-full rounded-xl border border-[var(--red)]/40 py-2 text-sm text-[var(--red)] hover:bg-[var(--red)]/10"
-          onClick={() =>
-            void (async () => {
-              if (
-                !confirm(
-                  "Supprimer TOUTES les données MyLife sur cet appareil ? Irréversible. Exporte un JSON avant si besoin."
+
+        <div className="mt-4 space-y-2 rounded-2xl border border-[var(--red)]/25 bg-[var(--red)]/5 p-4">
+          <h3 className="text-sm font-semibold text-[var(--text)]">Repartir à zéro</h3>
+          <p className="text-xs text-muted leading-relaxed">
+            Efface <strong className="text-[var(--text)]">tout</strong> sur cet appareil (habitudes, agenda, finances, notes, humeur, eau, objectifs, réglages…), te{" "}
+            <strong className="text-[var(--text)]">déconnecte</strong> (session app + Google Firebase si utilisé), puis recharge l’app comme au{" "}
+            <strong className="text-[var(--text)]">premier lancement</strong> (profil et préférences par défaut). Les données sur le cloud Firestore ne sont pas
+            supprimées côté serveur — seul l’historique <em>local</em> disparaît. Pense à exporter un JSON avant si tu veux une copie.
+          </p>
+          <button
+            type="button"
+            className="w-full rounded-xl bg-[var(--red)] py-3 text-sm font-semibold text-white shadow-md shadow-[var(--red)]/25 hover:brightness-110 active:scale-[0.99]"
+            onClick={() =>
+              void (async () => {
+                if (
+                  !confirm(
+                    "Réinitialisation complète : toutes les données locales seront supprimées et tu seras déconnecté. OK pour continuer ?"
+                  )
                 )
-              )
-                return;
-              await wipeAllLocalData();
-              await ensureSeedData();
-              toast.ok("Données effacées — rechargement");
-              window.setTimeout(() => window.location.reload(), 400);
-            })()
-          }
-        >
-          Supprimer toutes les données locales
-        </button>
+                  return;
+                if (!confirm("Dernière confirmation : tout sera effacé. C’est bien ce que tu veux ?")) return;
+                try {
+                  stopFirestoreDexieSync();
+                  await signOutFirebaseUser();
+                } catch {
+                  /* déjà déconnecté ou Firebase indispo */
+                }
+                await wipeAllLocalData();
+                await ensureSeedData();
+                signOut();
+                toast.ok("Réinitialisation terminée — rechargement…");
+                window.setTimeout(() => window.location.reload(), 500);
+              })()
+            }
+          >
+            Réinitialiser l’application à zéro
+          </button>
+        </div>
       </section>
 
       <section className="space-y-3">

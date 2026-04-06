@@ -16,6 +16,15 @@ function greeting(): string {
   return "Bonsoir";
 }
 
+function longDateFr(): string {
+  return new Date().toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 function completionStreak(
   habits: Habit[],
   rows: (HabitCompletion & { id: string })[]
@@ -43,13 +52,14 @@ function ScoreRing({ score }: { score: number }) {
   const r = 38;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - score / 100);
+  const stroke = score >= 80 ? "var(--green)" : "var(--fab-cyan)";
   return (
-    <svg width={90} height={90} viewBox="0 0 90 90" className="-rotate-90 shrink-0">
-      <circle cx={45} cy={45} r={r} fill="none" stroke="var(--border)" strokeWidth={7} />
+    <svg width={90} height={90} viewBox="0 0 90 90" className="-rotate-90 shrink-0 drop-shadow-[0_0_12px_color-mix(in_srgb,var(--fab-cyan)_35%,transparent)]">
+      <circle cx={45} cy={45} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={7} />
       <circle
         cx={45} cy={45} r={r}
         fill="none"
-        stroke={score >= 80 ? "var(--green)" : "var(--accent)"}
+        stroke={stroke}
         strokeWidth={7}
         strokeLinecap="round"
         strokeDasharray={circ}
@@ -129,33 +139,44 @@ export function Dashboard() {
   ).length;
 
   return (
-    <div className="space-y-5">
-      {/* En-tête */}
-      <header className="space-y-0.5">
-        <p className="text-sm font-medium text-muted">{greeting()},</p>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{profile?.prenom ?? "Bienvenue"} 👋</h1>
+    <div className="space-y-6">
+      {/* Hero type apps bien-être */}
+      <header className="glass-panel relative overflow-hidden px-5 py-6 sm:px-6">
+        <div
+          className="pointer-events-none absolute -right-8 -top-12 h-40 w-40 rounded-full opacity-40 blur-3xl"
+          style={{ background: "color-mix(in srgb, var(--fab-cyan) 45%, transparent)" }}
+          aria-hidden
+        />
+        <p className="relative text-sm font-medium capitalize text-muted">{longDateFr()}</p>
+        <p className="relative mt-1 text-sm font-medium text-[var(--fab-cyan)]">{greeting()}</p>
+        <h1 className="relative mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+          {profile?.prenom ?? "Bienvenue"} <span aria-hidden>👋</span>
+        </h1>
+        <p className="relative mt-3 max-w-md text-sm leading-relaxed text-muted opacity-90">
+          Voici ta journée en un coup d’œil — humeur, eau, agenda et plus encore.
+        </p>
       </header>
 
       <MoodWidget />
 
       {/* Score + streak */}
       <section className="flex gap-3">
-        <div className="flex flex-1 items-center gap-3 rounded-2xl elevated-surface p-4">
+        <div className="glass-panel flex flex-1 items-center gap-3 p-4">
           <ScoreRing score={dayScore} />
           <div>
             <p className="font-semibold">Journée</p>
             <p className="text-sm text-muted">{doneCnt}/{due.length} habitudes</p>
           </div>
         </div>
-        <div className="flex w-24 flex-col items-center justify-center rounded-2xl elevated-surface p-3 text-center">
+        <div className="glass-panel flex w-24 flex-col items-center justify-center p-3 text-center">
           <span className="flame-icon text-2xl" aria-hidden>🔥</span>
           <span className="text-xl font-bold">{streak}</span>
           <span className="text-xs text-muted">jours</span>
         </div>
       </section>
 
-      {/* Hydratation — rapide */}
-      <section className="rounded-2xl elevated-surface p-4">
+      {/* Hydratation */}
+      <section className="glass-panel p-4">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="font-semibold">Eau</p>
@@ -169,16 +190,16 @@ export function Dashboard() {
             aria-label={`Hydratation ${hydPct}%`}
           >
             <svg viewBox="0 0 48 48" className="h-full w-full">
-              <circle cx={24} cy={24} r={20} fill="var(--border)" />
+              <circle cx={24} cy={24} r={20} fill="rgba(255,255,255,0.06)" />
               <circle
                 cx={24} cy={24} r={20}
                 fill="none"
-                stroke="var(--accent)"
+                stroke="var(--fab-cyan)"
                 strokeWidth={4}
                 strokeLinecap="round"
                 strokeDasharray={`${125.7 * hydPct / 100} 125.7`}
                 strokeDashoffset={31.4}
-                style={{ transition: "stroke-dasharray 700ms cubic-bezier(0.22,1,.36,1)" }}
+                style={{ transition: "stroke-dasharray 700ms cubic-bezier(0.22,1,.36,1)", filter: "drop-shadow(0 0 6px color-mix(in srgb, var(--fab-cyan) 40%, transparent))" }}
               />
               <text x={24} y={24} textAnchor="middle" dominantBaseline="central"
                 style={{ fill: "var(--text)", fontSize: 11, fontWeight: 700, fontFamily: "var(--font-app)" }}>
@@ -193,7 +214,7 @@ export function Dashboard() {
               key={ml}
               type="button"
               onClick={() => void quickAddWater(ml)}
-              className="flex-1 rounded-xl border border-border bg-[var(--surface)] py-2 text-sm font-medium hover:border-accent hover:bg-[var(--accent-dim)] active:scale-95"
+              className="flex-1 rounded-xl border border-white/10 bg-[color-mix(in_srgb,var(--surface)_55%,transparent)] py-2.5 text-sm font-medium backdrop-blur-sm transition-colors hover:border-[var(--fab-cyan)]/50 hover:bg-[color-mix(in_srgb,var(--fab-cyan)_12%,transparent)] active:scale-95"
             >
               +{ml} ml
             </button>
@@ -202,13 +223,13 @@ export function Dashboard() {
       </section>
 
       {/* Prochain event */}
-      <section className="rounded-2xl elevated-surface p-4">
-        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
+      <section className="glass-panel p-4">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">
           Prochain événement
         </p>
         {nextEvent ? (
           <div>
-            <p className="font-semibold">{nextEvent.titre}</p>
+            <p className="text-lg font-semibold">{nextEvent.titre}</p>
             <p className="text-sm text-muted">
               {new Date(nextEvent.debut).toLocaleString("fr-FR", {
                 weekday: "short",
@@ -224,11 +245,10 @@ export function Dashboard() {
         )}
       </section>
 
-      {/* Finances */}
       {solde !== null && (
-        <section className="rounded-2xl elevated-surface p-4">
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Solde</p>
-          <p className="text-2xl font-bold">{solde.toLocaleString("fr-FR")} €</p>
+        <section className="glass-panel p-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">Solde</p>
+          <p className="text-3xl font-bold tracking-tight">{solde.toLocaleString("fr-FR")} €</p>
         </section>
       )}
     </div>

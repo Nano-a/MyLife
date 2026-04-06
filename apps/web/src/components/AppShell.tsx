@@ -76,7 +76,7 @@ export function AppShell() {
   const showOnboarding = prefs && !prefs.onboardingCompleted;
 
   return (
-    <div className="flex min-h-dvh flex-col pb-[calc(5.25rem+env(safe-area-inset-bottom))]">
+    <div className="flex min-h-dvh flex-col pb-[calc(6.75rem+env(safe-area-inset-bottom))]">
       <a
         href="#main-content"
         className="pointer-events-none fixed left-4 top-4 z-[100] -translate-y-[200%] rounded-xl bg-accent px-4 py-2 text-sm text-white opacity-0 shadow-lg transition-all focus:pointer-events-auto focus:translate-y-0 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/80"
