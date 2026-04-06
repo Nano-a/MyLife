@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useThemePrefs } from "../theme/ThemeProvider";
 import { getProfile, saveProfile } from "../db";
 import type { UserProfile, ThemeId, ActivityLevel, Sex, DndPeriod } from "@mylife/core";
+import { profileBmi } from "@mylife/core";
 import { hashPin } from "../lib/pin";
 import { useSessionStore } from "../auth/sessionStore";
 import { signOutFirebaseUser } from "../auth/firebaseAuth";
@@ -14,16 +15,37 @@ export function SettingsPage() {
   const authMethod = useSessionStore((s) => s.authMethod);
   const sessionEmail = useSessionStore((s) => s.userEmail);
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
+  /** Dernière version persistée — utilisée pour annuler l’édition */
+  const [savedProfile, setSavedProfile] = useState<UserProfile>(defaultProfile);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [pinNew, setPinNew] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
 
   useEffect(() => {
-    void getProfile().then((p) => p && setProfile(p));
+    void getProfile().then((p) => {
+      if (p) {
+        setProfile(p);
+        setSavedProfile(p);
+      }
+    });
   }, []);
 
-  async function saveProfil(e: React.FormEvent) {
-    e.preventDefault();
+  async function saveProfil(e?: React.FormEvent) {
+    e?.preventDefault();
     await saveProfile(profile);
+    setSavedProfile(profile);
+    setEditingProfile(false);
+    toast.ok("Profil enregistré — ta carte est à jour");
+  }
+
+  function cancelProfileEdit() {
+    setProfile(savedProfile);
+    setEditingProfile(false);
+  }
+
+  function openProfileEdit() {
+    setProfile(savedProfile);
+    setEditingProfile(true);
   }
 
   async function savePin() {
@@ -49,86 +71,122 @@ export function SettingsPage() {
         <p className="text-sm text-muted">Profil, thème, sécurité, notifications.</p>
       </header>
 
-      <form onSubmit={saveProfil} className="space-y-3 rounded-2xl border border-border bg-elevated p-4">
-        <h2 className="font-semibold">Profil</h2>
-        <label className="block text-xs text-muted">Prénom</label>
-        <input
-          className="w-full rounded-xl border border-border bg-surface px-3 py-2"
-          value={profile.prenom}
-          onChange={(e) => setProfile({ ...profile, prenom: e.target.value })}
-        />
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Field label="Sexe">
-            <select
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
-              value={profile.sexe}
-              onChange={(e) => setProfile({ ...profile, sexe: e.target.value as Sex })}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-semibold">Profil</h2>
+          {!editingProfile && (
+            <button
+              type="button"
+              onClick={openProfileEdit}
+              className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-muted hover:border-accent hover:text-accent active:scale-95"
             >
-              <option value="homme">Homme</option>
-              <option value="femme">Femme</option>
-              <option value="autre">Autre</option>
-            </select>
-          </Field>
-          <Field label="Âge">
-            <input
-              type="number"
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
-              value={profile.age}
-              onChange={(e) => setProfile({ ...profile, age: Number(e.target.value) })}
-            />
-          </Field>
-          <Field label="Poids (kg)">
-            <input
-              type="number"
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
-              value={profile.poidsKg}
-              onChange={(e) => setProfile({ ...profile, poidsKg: Number(e.target.value) })}
-            />
-          </Field>
-          <Field label="Taille (cm)">
-            <input
-              type="number"
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
-              value={profile.tailleCm}
-              onChange={(e) => setProfile({ ...profile, tailleCm: Number(e.target.value) })}
-            />
-          </Field>
+              Modifier
+            </button>
+          )}
         </div>
-        <Field label="Activité habituelle">
-          <select
-            className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
-            value={profile.activiteHabituelle}
-            onChange={(e) =>
-              setProfile({ ...profile, activiteHabituelle: e.target.value as ActivityLevel })
-            }
+
+        {!editingProfile ? (
+          <ProfileIdentityCard profile={savedProfile} onOpenEdit={openProfileEdit} />
+        ) : (
+          <form
+            onSubmit={(e) => void saveProfil(e)}
+            className="space-y-3 rounded-2xl border border-border bg-elevated p-4"
           >
-            <option value="sedentaire">Sédentaire</option>
-            <option value="modere">Modéré</option>
-            <option value="intense">Intense</option>
-          </select>
-        </Field>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Field label="Lever">
+            <p className="text-xs text-muted">
+              Ajuste tes informations puis valide pour mettre à jour ta carte.
+            </p>
+            <label className="block text-xs text-muted">Prénom</label>
             <input
-              type="time"
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
-              value={profile.heureLever}
-              onChange={(e) => setProfile({ ...profile, heureLever: e.target.value })}
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2"
+              value={profile.prenom}
+              onChange={(e) => setProfile({ ...profile, prenom: e.target.value })}
             />
-          </Field>
-          <Field label="Coucher">
-            <input
-              type="time"
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
-              value={profile.heureCoucher}
-              onChange={(e) => setProfile({ ...profile, heureCoucher: e.target.value })}
-            />
-          </Field>
-        </div>
-        <button type="submit" className="w-full rounded-xl bg-accent py-2 text-white">
-          Enregistrer le profil
-        </button>
-      </form>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="Sexe">
+                <select
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
+                  value={profile.sexe}
+                  onChange={(e) => setProfile({ ...profile, sexe: e.target.value as Sex })}
+                >
+                  <option value="homme">Homme</option>
+                  <option value="femme">Femme</option>
+                  <option value="autre">Autre</option>
+                </select>
+              </Field>
+              <Field label="Âge">
+                <input
+                  type="number"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
+                  value={profile.age}
+                  onChange={(e) => setProfile({ ...profile, age: Number(e.target.value) })}
+                />
+              </Field>
+              <Field label="Poids (kg)">
+                <input
+                  type="number"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
+                  value={profile.poidsKg}
+                  onChange={(e) => setProfile({ ...profile, poidsKg: Number(e.target.value) })}
+                />
+              </Field>
+              <Field label="Taille (cm)">
+                <input
+                  type="number"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
+                  value={profile.tailleCm}
+                  onChange={(e) => setProfile({ ...profile, tailleCm: Number(e.target.value) })}
+                />
+              </Field>
+            </div>
+            <Field label="Activité habituelle">
+              <select
+                className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
+                value={profile.activiteHabituelle}
+                onChange={(e) =>
+                  setProfile({ ...profile, activiteHabituelle: e.target.value as ActivityLevel })
+                }
+              >
+                <option value="sedentaire">Sédentaire</option>
+                <option value="modere">Modéré</option>
+                <option value="intense">Intense</option>
+              </select>
+            </Field>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="Lever">
+                <input
+                  type="time"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
+                  value={profile.heureLever}
+                  onChange={(e) => setProfile({ ...profile, heureLever: e.target.value })}
+                />
+              </Field>
+              <Field label="Coucher">
+                <input
+                  type="time"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2"
+                  value={profile.heureCoucher}
+                  onChange={(e) => setProfile({ ...profile, heureCoucher: e.target.value })}
+                />
+              </Field>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:gap-3">
+              <button
+                type="submit"
+                className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-white active:scale-[0.98] sm:flex-1"
+              >
+                Enregistrer et valider
+              </button>
+              <button
+                type="button"
+                onClick={cancelProfileEdit}
+                className="w-full rounded-xl border border-border py-3 text-sm font-medium text-muted hover:text-[var(--text)] active:scale-[0.98] sm:flex-1"
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
 
       <section className="space-y-3 rounded-2xl border border-border bg-elevated p-4">
         <h2 className="font-semibold">Apparence</h2>
@@ -267,6 +325,94 @@ export function SettingsPage() {
           Déconnexion
         </button>
       </section>
+    </div>
+  );
+}
+
+const SEXE_LABEL: Record<Sex, string> = { homme: "Homme", femme: "Femme", autre: "Autre" };
+const ACTIVITE_LABEL: Record<ActivityLevel, string> = {
+  sedentaire: "Sédentaire",
+  modere: "Modéré",
+  intense: "Intense",
+};
+
+/** Carte d’identité du profil — clic pour ouvrir l’édition */
+function ProfileIdentityCard({
+  profile,
+  onOpenEdit,
+}: {
+  profile: UserProfile;
+  onOpenEdit: () => void;
+}) {
+  const initial = profile.prenom?.trim()?.charAt(0)?.toUpperCase() || "?";
+  const bmi = Math.round(profileBmi(profile) * 10) / 10;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpenEdit}
+      className="group w-full rounded-2xl border-2 border-accent/30 bg-gradient-to-br from-accent/20 via-[var(--elevated)] to-[var(--surface)] p-[3px] text-left shadow-lg shadow-black/20 transition hover:border-accent/55 hover:shadow-accent/15 active:scale-[0.99]"
+      aria-label="Modifier le profil"
+    >
+      <div className="relative overflow-hidden rounded-[0.9rem] border border-border bg-[var(--elevated)] px-4 pb-4 pt-5">
+        <div
+          className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-accent/10"
+          aria-hidden
+        />
+        <div className="absolute right-3 top-3 rounded-full border border-border/80 bg-[var(--surface)] px-2 py-0.5 text-[0.65rem] font-medium text-muted group-hover:border-accent/40 group-hover:text-accent">
+          Modifier
+        </div>
+
+        <div className="flex gap-4">
+          {profile.photoUrl ? (
+            <img
+              src={profile.photoUrl}
+              alt=""
+              className="h-20 w-20 shrink-0 rounded-2xl border-2 border-accent/40 object-cover shadow-md"
+            />
+          ) : (
+            <div
+              className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl border-2 border-accent/50 bg-accent/20 text-3xl font-bold text-accent shadow-inner"
+              aria-hidden
+            >
+              {initial}
+            </div>
+          )}
+          <div className="min-w-0 flex-1 pt-0.5">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted">Profil</p>
+            <p className="truncate text-xl font-bold leading-tight">{profile.prenom || "—"}</p>
+            <p className="mt-1 text-xs text-muted opacity-80 group-hover:opacity-100">
+              Touche la carte pour modifier tes infos
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-2 text-sm sm:grid-cols-3">
+          <IdentityChip label="Âge" value={`${profile.age} ans`} />
+          <IdentityChip label="Sexe" value={SEXE_LABEL[profile.sexe]} />
+          <IdentityChip label="Poids" value={`${profile.poidsKg} kg`} />
+          <IdentityChip label="Taille" value={`${profile.tailleCm} cm`} />
+          <IdentityChip label="IMC" value={`${bmi}`} />
+          <IdentityChip label="Activité" value={ACTIVITE_LABEL[profile.activiteHabituelle]} />
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-[var(--surface)] px-3 py-2.5 text-xs">
+          <span className="text-muted">Rythme</span>
+          <span className="font-medium">
+            {profile.heureLever} → {profile.heureCoucher}
+          </span>
+          <span className="text-muted">(lever — coucher)</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function IdentityChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-[var(--surface)] px-2.5 py-2">
+      <p className="text-[0.65rem] uppercase tracking-wide text-muted">{label}</p>
+      <p className="truncate font-semibold">{value}</p>
     </div>
   );
 }
