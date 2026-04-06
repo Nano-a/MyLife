@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate-icons": "python3 scripts/generate-pwa-icons.py",
     "build": "tsc -b && vite build && cp dist/index.html dist/404.html",
     "lint": "tsc --noEmit -p tsconfig.json",
     "preview": "vite preview"
