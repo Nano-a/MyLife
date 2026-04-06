@@ -6,6 +6,7 @@ import { waterTargetForDate } from "../lib/hydrationTarget";
 import { habitsDueToday } from "../lib/habitsDue";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "../lib/toastStore";
+import { MoodWidget } from "../components/MoodWidget";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -134,6 +135,8 @@ export function Dashboard() {
         <p className="text-sm text-muted">{greeting()},</p>
         <h1 className="text-2xl font-bold">{profile?.prenom ?? "Bienvenue"} 👋</h1>
       </header>
+
+      <MoodWidget />
 
       {/* Score + streak */}
       <section className="flex gap-3">

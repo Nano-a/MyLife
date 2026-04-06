@@ -25,15 +25,23 @@ export interface DndPeriod {
   enabled: boolean;
 }
 
+export type AppLanguage = "fr" | "en";
+
 export interface AppPreferences {
   theme: ThemeId;
   accentColor: string;
   fontFamily: "system" | "inter" | "source" | "atkinson";
   textScale: "petit" | "normal" | "grand";
   appDisplayName: string;
+  /** Langue UI (i18n) */
+  language?: AppLanguage;
+  /** True après le premier flux d’accueil */
+  onboardingCompleted?: boolean;
   pinEnabled: boolean;
   pinHash?: string;
   biometricEnabled: boolean;
+  /** Identifiants WebAuthn (JSON stringifié) pour déverrouillage */
+  webAuthnCredentialIds?: string;
   lockTimeoutMin: 0 | 1 | 5;
   notifHydration: boolean;
   notifHabits: boolean;
@@ -67,6 +75,8 @@ export interface Habit {
   categorie: string;
   objectifQuantite?: number;
   uniteQuantite?: string;
+  /** Lien optionnel vers un objectif (suivi croisé) */
+  linkedObjectiveId?: string;
   archived?: boolean;
   createdAt: number;
 }
@@ -253,6 +263,14 @@ export interface NoteFolder {
   createdAt: number;
 }
 
+/** Pièce jointe légère (data URL), stockée localement */
+export interface RichNoteAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  dataUrl: string;
+}
+
 export interface RichNote {
   id: string;
   titre: string;
@@ -261,6 +279,8 @@ export interface RichNote {
   bgColor: string;   // couleur de fond de la note
   tags: string[];
   epingle: boolean;
+  /** Images / fichiers petits encodés en data URL (hors ligne) */
+  attachments?: RichNoteAttachment[];
   updatedAt: number;
   createdAt: number;
 }
@@ -275,4 +295,12 @@ export interface HydrationDayEntry {
 export interface HydrationDay {
   date: string;
   entries: HydrationDayEntry[];
+}
+
+/** Humeur / ressenti du jour (1 = très bas · 5 = très bien) */
+export interface MoodDay {
+  date: string; // YYYY-MM-DD
+  score: 1 | 2 | 3 | 4 | 5;
+  note?: string;
+  updatedAt: number;
 }

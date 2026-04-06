@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { verifyPin } from "../lib/pin";
+import { useThemePrefs } from "../theme/ThemeProvider";
+import { authenticateLocalPasskey, isWebAuthnAvailable } from "../lib/webauthnLocal";
 
 type Props = {
   pinHash: string;
@@ -7,8 +9,20 @@ type Props = {
 };
 
 export function LockScreen({ pinHash, onUnlocked }: Props) {
+  const { prefs } = useThemePrefs();
   const [pin, setPin] = useState("");
   const [err, setErr] = useState(false);
+  const canPasskey =
+    isWebAuthnAvailable() &&
+    Boolean(prefs.webAuthnCredentialIds?.trim());
+
+  async function tryPasskey() {
+    const ok = await authenticateLocalPasskey(prefs.webAuthnCredentialIds);
+    if (ok) {
+      setErr(false);
+      onUnlocked();
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,6 +67,15 @@ export function LockScreen({ pinHash, onUnlocked }: Props) {
             Déverrouiller
           </button>
         </form>
+        {canPasskey && (
+          <button
+            type="button"
+            onClick={() => void tryPasskey()}
+            className="mt-3 w-full rounded-xl border border-border py-3 text-sm font-medium text-muted hover:border-accent hover:text-[var(--text)]"
+          >
+            Déverrouiller avec la biométrie / clé d’accès
+          </button>
+        )}
       </div>
     </div>
   );

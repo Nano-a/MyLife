@@ -1,19 +1,23 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { useThemePrefs } from "../theme/ThemeProvider";
+import { t } from "../i18n/strings";
 
 const tabs = [
-  { to: "/app/accueil",    label: "Accueil",    icon: "🏠" },
-  { to: "/app/agenda",     label: "Agenda",     icon: "📅" },
-  { to: "/app/habitudes",  label: "Eau",        icon: "💧" },
-  { to: "/app/sport",      label: "Sport",      icon: "💪" },
-  { to: "/app/finances",   label: "Finances",   icon: "💰" },
-  { to: "/app/objectifs",  label: "Objectifs",  icon: "🎯" },
-  { to: "/app/notes",      label: "Notes",      icon: "📓" },
-  { to: "/app/parametres", label: "Réglages",   icon: "⚙️" },
+  { to: "/app/accueil",    key: "tabHome" as const,    icon: "🏠" },
+  { to: "/app/agenda",     key: "tabAgenda" as const,  icon: "📅" },
+  { to: "/app/habitudes",  key: "tabHabits" as const,  icon: "💧" },
+  { to: "/app/sport",      key: "tabSport" as const,   icon: "💪" },
+  { to: "/app/finances",   key: "tabFinance" as const, icon: "💰" },
+  { to: "/app/objectifs",  key: "tabGoals" as const,   icon: "🎯" },
+  { to: "/app/notes",      key: "tabNotes" as const,   icon: "📓" },
+  { to: "/app/parametres", key: "tabSettings" as const, icon: "⚙️" },
 ] as const;
 
 export function TabBar() {
   const { pathname } = useLocation();
-  const activeIdx = tabs.findIndex((t) => pathname.startsWith(t.to));
+  const { prefs } = useThemePrefs();
+  const lng = prefs.language;
+  const activeIdx = tabs.findIndex((tab) => pathname.startsWith(tab.to));
 
   return (
     <nav
@@ -21,12 +25,12 @@ export function TabBar() {
       aria-label="Navigation principale"
     >
       <div className="mx-auto flex max-w-3xl px-1 py-1">
-        {tabs.map((t, i) => {
+        {tabs.map((tab, i) => {
           const isActive = i === activeIdx;
           return (
             <NavLink
-              key={t.to}
-              to={t.to}
+              key={tab.to}
+              to={tab.to}
               className="relative flex flex-1 flex-col items-center py-1.5 text-[0.6rem]"
               aria-current={isActive ? "page" : undefined}
             >
@@ -41,13 +45,13 @@ export function TabBar() {
                 style={{ transform: isActive ? "scale(1.18)" : "scale(1)" }}
                 aria-hidden
               >
-                {t.icon}
+                {tab.icon}
               </span>
               <span
                 className="mt-0.5 truncate transition-colors duration-200"
                 style={{ color: isActive ? "var(--accent)" : "var(--muted)" }}
               >
-                {t.label}
+                {t(tab.key, lng)}
               </span>
             </NavLink>
           );

@@ -1,11 +1,22 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../db";
 import type { AgendaEvent, EventCategory, RecurrenceType } from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
+import { buildPrintableAgendaHtml, downloadAgendaCsv, printAgendaWindow } from "../lib/agendaExport";
 
-type View = "jour" | "semaine" | "mois";
+type View = "jour" | "semaine" | "mois" | "annee";
+
+const RAPPEL_SELECT: { value: string; label: string }[] = [
+  { value: "", label: "Pas de rappel" },
+  { value: "5", label: "5 min avant" },
+  { value: "10", label: "10 min avant" },
+  { value: "15", label: "15 min avant" },
+  { value: "30", label: "30 min avant" },
+  { value: "60", label: "1 h avant" },
+  { value: "1440", label: "24 h avant" },
+];
 
 const CAT_COLOR: Record<EventCategory, string> = {
   cours: "#3b82f6", travail: "#8b5cf6", sport: "#22c55e",
@@ -71,9 +82,14 @@ function getWindowBounds(view: View, refDate: Date): { start: number; end: numbe
     const start = new Date(y, m, d - dow, 0, 0, 0).getTime();
     return { start, end: start + 7 * 86_400_000 };
   }
-  // mois
-  const start = new Date(y, m, 1).getTime();
-  const end   = new Date(y, m + 1, 1).getTime();
+  if (view === "mois") {
+    const start = new Date(y, m, 1).getTime();
+    const end   = new Date(y, m + 1, 1).getTime();
+    return { start, end };
+  }
+  // année
+  const start = new Date(y, 0, 1).getTime();
+  const end   = new Date(y + 1, 0, 1).getTime();
   return { start, end };
 }
 
@@ -108,9 +124,10 @@ export function AgendaPage() {
 
   function navigate(dir: -1 | 1) {
     const d = new Date(refDate);
-    if (view === "jour")    d.setDate(d.getDate() + dir);
-    if (view === "semaine") d.setDate(d.getDate() + dir * 7);
-    if (view === "mois")    d.setMonth(d.getMonth() + dir);
+    if (view === "jour") d.setDate(d.getDate() + dir);
+    else if (view === "semaine") d.setDate(d.getDate() + dir * 7);
+    else if (view === "mois") d.setMonth(d.getMonth() + dir);
+    else d.setFullYear(d.getFullYear() + dir);
     setRef(d);
   }
 
@@ -127,7 +144,8 @@ export function AgendaPage() {
       const endW = new Date(start + 6 * 86_400_000);
       return `${new Date(start).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} – ${endW.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`;
     }
-    return refDate.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    if (view === "mois") return refDate.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    return String(refDate.getFullYear());
   }, [view, refDate, start]);
 
   return (
@@ -145,10 +163,24 @@ export function AgendaPage() {
             ›
           </button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setRef(new Date())}
             className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95">
             Aujourd'hui
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadAgendaCsv(rawEvents, `mylife-agenda-${new Date().toISOString().slice(0, 10)}.csv`)}
+            className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+          >
+            CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => printAgendaWindow("Agenda MyLife", buildPrintableAgendaHtml(rawEvents))}
+            className="rounded-xl border border-border bg-elevated px-3 py-1.5 text-sm text-muted hover:text-[var(--text)] active:scale-95"
+          >
+            Imprimer
           </button>
           <button
             type="button"
@@ -163,11 +195,18 @@ export function AgendaPage() {
 
       {/* Sélecteur de vue */}
       <div className="flex gap-1 rounded-xl border border-border bg-elevated p-1">
-        {(["jour","semaine","mois"] as View[]).map((v) => (
+        {(
+          [
+            ["jour", "jour"],
+            ["semaine", "semaine"],
+            ["mois", "mois"],
+            ["annee", "année"],
+          ] as [View, string][]
+        ).map(([v, label]) => (
           <button key={v} type="button" onClick={() => setView(v)}
             className={["flex-1 rounded-lg py-1.5 text-sm font-medium capitalize",
               view === v ? "bg-accent text-white" : "text-muted hover:text-[var(--text)]"].join(" ")}>
-            {v}
+            {label}
           </button>
         ))}
       </div>
@@ -195,8 +234,39 @@ export function AgendaPage() {
         />
       )}
 
+      {/* ── Vue année ── */}
+      {view === "annee" && (
+        <div className="space-y-4">
+          <YearView
+            year={refDate.getFullYear()}
+            rawEvents={rawEvents}
+            onPickMonth={(monthIndex) => {
+              setRef(new Date(refDate.getFullYear(), monthIndex, 1));
+              setView("mois");
+            }}
+          />
+          {sortedEvents.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+              <p className="text-2xl">📅</p>
+              <p className="mt-2 text-sm text-muted">Aucun événement cette année</p>
+            </div>
+          ) : (
+            <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-border bg-elevated p-3 text-sm">
+              {sortedEvents.slice(0, 80).map((e) => (
+                <li key={e.id}>
+                  <button type="button" className="w-full truncate rounded-lg px-2 py-1 text-left hover:bg-[var(--surface)]" onClick={() => setEditEvent(e)}>
+                    <span className="text-muted">{new Date(e.debut).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>{" "}
+                    <span className="font-medium">{e.titre}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Liste compacte (toujours visible) */}
-      {view !== "mois" && sortedEvents.length === 0 && (
+      {view !== "mois" && view !== "annee" && sortedEvents.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border p-8 text-center">
           <p className="text-2xl">📅</p>
           <p className="mt-2 text-sm text-muted">Aucun événement sur cette période</p>
@@ -216,6 +286,41 @@ export function AgendaPage() {
           onDelete={() => { void deleteEvent(editEvent); setEditEvent(null); }}
         />
       )}
+    </div>
+  );
+}
+
+/* ═══════════ Vue année (aperçu par mois) ════════════════════════════════ */
+function YearView({
+  year,
+  rawEvents,
+  onPickMonth,
+}: {
+  year: number;
+  rawEvents: AgendaEvent[];
+  onPickMonth: (monthIndex: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      {Array.from({ length: 12 }, (_, m) => {
+        const mStart = new Date(year, m, 1).getTime();
+        const mEnd = new Date(year, m + 1, 1).getTime();
+        const count = rawEvents.reduce((acc, e) => acc + expandEvent(e, mStart, mEnd).length, 0);
+        return (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onPickMonth(m)}
+            className="rounded-xl border border-border bg-elevated p-3 text-center transition-colors hover:border-accent"
+          >
+            <p className="text-xs capitalize text-muted">
+              {new Date(year, m).toLocaleDateString("fr-FR", { month: "short" })}
+            </p>
+            <p className="text-xl font-bold">{count}</p>
+            <p className="text-[0.65rem] text-muted">événements</p>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -367,6 +472,7 @@ function AddEventModal({
   const [recEnd, setRecEnd]       = useState("");
   const [journee, setJournee]     = useState(false);
   const [persist, setPersist]     = useState(false);
+  const [rappel, setRappel]       = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -383,6 +489,7 @@ function AddEventModal({
       couleur: couleur || CAT_COLOR[categorie],
       categorie,
       notificationPersistante: persist,
+      rappelMinutes: rappel ? Number(rappel) : undefined,
       recurrence,
       recurrenceEnd: recEnd
         ? (() => {
@@ -395,7 +502,7 @@ function AddEventModal({
     };
     await db.events.add(ev);
     toast.ok(`« ${ev.titre} » ajouté 📅`);
-    setTitre(""); setDebut(""); setFin(""); setLieu(""); setDesc(""); setRec("once"); setRecEnd("");
+    setTitre(""); setDebut(""); setFin(""); setLieu(""); setDesc(""); setRec("once"); setRecEnd(""); setRappel("");
     onClose();
   }
 
@@ -450,6 +557,19 @@ function AddEventModal({
           className="w-full resize-none rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-accent"
           placeholder="Description (optionnel)" value={desc} onChange={(e) => setDesc(e.target.value)} />
 
+        <div>
+          <label className="text-xs text-muted">Rappel avant le début</label>
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={rappel}
+            onChange={(e) => setRappel(e.target.value)}
+          >
+            {RAPPEL_SELECT.map((o) => (
+              <option key={o.value || "none"} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Récurrence */}
         <div>
           <label className="text-xs text-muted">Répétition</label>
@@ -493,6 +613,16 @@ function AddEventModal({
   );
 }
 
+function toDatetimeLocalValue(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function toDateOnlyInput(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
 /* ═══════════ Modal édition événement ═════════════════════════════════════ */
 function EditEventModal({
   event, onClose, onDelete,
@@ -501,57 +631,230 @@ function EditEventModal({
   const inProgress = event.debut <= now && event.fin >= now;
   const pct = inProgress ? Math.round(((now - event.debut) / (event.fin - event.debut)) * 100) : 0;
 
+  const [titre, setTitre]         = useState(event.titre);
+  const [categorie, setCategorie] = useState<EventCategory>(event.categorie);
+  const [debut, setDebut]         = useState(
+    event.journeeEntiere ? toDateOnlyInput(event.debut) : toDatetimeLocalValue(event.debut)
+  );
+  const [fin, setFin]             = useState(
+    event.journeeEntiere ? "" : toDatetimeLocalValue(event.fin)
+  );
+  const [lieu, setLieu]           = useState(event.lieu ?? "");
+  const [desc, setDesc]           = useState(event.description ?? "");
+  const [couleur, setCouleur]     = useState(event.couleur);
+  const [recurrence, setRec]      = useState<RecurrenceType>(event.recurrence);
+  const [recEnd, setRecEnd]       = useState(
+    event.recurrenceEnd != null ? toDateOnlyInput(event.recurrenceEnd) : ""
+  );
+  const [journee, setJournee]     = useState(event.journeeEntiere);
+  const [persist, setPersist]     = useState(event.notificationPersistante ?? false);
+  const [rappel, setRappel]       = useState(
+    event.rappelMinutes != null && event.rappelMinutes > 0 ? String(event.rappelMinutes) : ""
+  );
+
+  useEffect(() => {
+    setTitre(event.titre);
+    setCategorie(event.categorie);
+    setDebut(event.journeeEntiere ? toDateOnlyInput(event.debut) : toDatetimeLocalValue(event.debut));
+    setFin(event.journeeEntiere ? "" : toDatetimeLocalValue(event.fin));
+    setLieu(event.lieu ?? "");
+    setDesc(event.description ?? "");
+    setCouleur(event.couleur);
+    setRec(event.recurrence);
+    setRecEnd(event.recurrenceEnd != null ? toDateOnlyInput(event.recurrenceEnd) : "");
+    setJournee(event.journeeEntiere);
+    setPersist(event.notificationPersistante ?? false);
+    setRappel(event.rappelMinutes != null && event.rappelMinutes > 0 ? String(event.rappelMinutes) : "");
+  }, [event.id]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!titre.trim() || (!journee && (!debut || !fin))) return;
+    const updated: AgendaEvent = {
+      ...event,
+      titre: titre.trim(),
+      description: desc.trim() || undefined,
+      lieu: lieu.trim() || undefined,
+      debut: journee
+        ? new Date(debut || new Date().toISOString().slice(0, 10)).getTime()
+        : new Date(debut).getTime(),
+      fin: journee
+        ? new Date(debut || new Date().toISOString().slice(0, 10)).getTime() + 86_399_000
+        : new Date(fin).getTime(),
+      journeeEntiere: journee,
+      couleur: couleur || CAT_COLOR[categorie],
+      categorie,
+      notificationPersistante: persist,
+      rappelMinutes: rappel ? Number(rappel) : undefined,
+      recurrence,
+      recurrenceEnd: recEnd
+        ? (() => {
+            const x = new Date(recEnd + "T12:00:00");
+            x.setHours(23, 59, 59, 999);
+            return x.getTime();
+          })()
+        : undefined,
+    };
+    await db.events.put(updated);
+    toast.ok("Événement mis à jour");
+    onClose();
+  }
+
   return (
-    <Modal open onClose={onClose} title={event.titre}>
-      <div className="space-y-4">
-        {/* Barre progression si en cours */}
+    <Modal open onClose={onClose} title="Modifier l’événement">
+      <form onSubmit={submit} className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
         {inProgress && (
           <div>
             <div className="h-2 overflow-hidden rounded-full bg-[var(--surface)]">
               <div className="h-full transition-all duration-1000" style={{ width: `${pct}%`, background: event.couleur }} />
             </div>
             <p className="mt-1 text-sm font-medium" style={{ color: event.couleur }}>
-              En cours · {pct}% · {new Date(event.fin).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} fin prévue
+              En cours · {pct}% · fin prévue{" "}
+              {new Date(event.fin).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
             </p>
           </div>
         )}
 
-        <div className="space-y-2 rounded-xl border border-border bg-[var(--surface)] p-3 text-sm">
-          <p><span className="text-muted">Catégorie :</span> {event.categorie}</p>
-          <p>
-            <span className="text-muted">Horaire : </span>
-            {event.journeeEntiere ? "Journée entière" :
-              `${new Date(event.debut).toLocaleString("fr-FR", { weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })} → ${new Date(event.fin).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`}
-          </p>
-          {event.lieu && <p><span className="text-muted">Lieu :</span> 📍 {event.lieu}</p>}
-          {event.description && <p className="text-muted">{event.description}</p>}
-          {event.recurrence !== "once" && (
-            <p>
-              <span className="text-muted">Répétition :</span> 🔄 {RECURRENCE_LABELS[event.recurrence]}
-              {event.recurrenceEnd != null && (
-                <>
-                  {" "}
-                  <span className="text-muted">
-                    (jusqu’au{" "}
-                    {new Date(event.recurrenceEnd).toLocaleDateString("fr-FR", {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                    , inclus)
-                  </span>
-                </>
-              )}
-            </p>
-          )}
+        <input
+          className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2.5 outline-none focus:border-accent"
+          placeholder="Titre"
+          value={titre}
+          onChange={(e) => setTitre(e.target.value)}
+        />
+
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(CAT_COLOR) as EventCategory[]).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                setCategorie(c);
+                setCouleur(CAT_COLOR[c]);
+              }}
+              className={[
+                "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm capitalize",
+                categorie === c ? "border-accent bg-accent/10 text-accent" : "border-border text-muted",
+              ].join(" ")}
+            >
+              {c}
+            </button>
+          ))}
         </div>
 
-        <button type="button" onClick={onDelete}
-          className="w-full rounded-xl border border-[var(--red)]/30 py-2 text-sm text-[var(--red)] active:scale-95">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={journee} onChange={(e) => setJournee(e.target.checked)} />
+          Journée entière
+        </label>
+
+        {journee ? (
+          <input
+            type="date"
+            className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={debut}
+            onChange={(e) => setDebut(e.target.value)}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted">Début</label>
+              <input
+                type="datetime-local"
+                className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+                value={debut}
+                onChange={(e) => setDebut(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted">Fin</label>
+              <input
+                type="datetime-local"
+                className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+                value={fin}
+                onChange={(e) => setFin(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        <input
+          className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-accent"
+          placeholder="Lieu (optionnel)"
+          value={lieu}
+          onChange={(e) => setLieu(e.target.value)}
+        />
+        <textarea
+          rows={2}
+          className="w-full resize-none rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-accent"
+          placeholder="Description (optionnel)"
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+        />
+
+        <div>
+          <label className="text-xs text-muted">Rappel avant le début</label>
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={rappel}
+            onChange={(e) => setRappel(e.target.value)}
+          >
+            {RAPPEL_SELECT.map((o) => (
+              <option key={o.value || "none"} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted">Répétition</label>
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={recurrence}
+            onChange={(e) => setRec(e.target.value as RecurrenceType)}
+          >
+            {(Object.entries(RECURRENCE_LABELS) as [RecurrenceType, string][]).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </div>
+        {recurrence !== "once" && (
+          <div>
+            <label className="text-xs text-muted">Dernier jour inclus (optionnel)</label>
+            <input
+              type="date"
+              className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+              value={recEnd}
+              onChange={(e) => setRecEnd(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted">Couleur</label>
+            <input
+              type="color"
+              value={couleur}
+              onChange={(e) => setCouleur(e.target.value)}
+              className="h-8 w-10 cursor-pointer rounded-lg border-0 bg-transparent p-0.5"
+            />
+          </div>
+          <label className="flex flex-1 items-center gap-2 text-sm">
+            <input type="checkbox" checked={persist} onChange={(e) => setPersist(e.target.checked)} />
+            Notif. persistante
+          </label>
+        </div>
+
+        <button type="submit" className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95">
+          Enregistrer
+        </button>
+
+        <button
+          type="button"
+          onClick={onDelete}
+          className="w-full rounded-xl border border-[var(--red)]/30 py-2 text-sm text-[var(--red)] active:scale-95"
+        >
           🗑 Supprimer cet événement
         </button>
-      </div>
+      </form>
     </Modal>
   );
 }

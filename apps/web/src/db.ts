@@ -9,9 +9,10 @@ import type {
   Habit,
   HabitCompletion,
   HydrationDayEntry,
+  MoodDay,
   NoteFolder,
-  Objective,
   RichNote,
+  Objective,
   SportSession,
   SportTemplate,
   UserProfile,
@@ -42,6 +43,7 @@ export class MyLifeDB extends Dexie {
   noteFolders!: EntityTable<NoteFolder, "id">;
   notes!: EntityTable<RichNote, "id">;
   hydrationDays!: EntityTable<HydrationRow, "date">;
+  moodDays!: EntityTable<MoodDay, "date">;
 
   constructor() {
     super("mylife_db");
@@ -123,6 +125,25 @@ export class MyLifeDB extends Dexie {
           });
           await tx.table("transactions").delete(t.id);
         }
+      });
+
+    this.version(4)
+      .stores({
+        settings: "key",
+        habits: "id, createdAt, archived",
+        habitCompletions: "id, habitId, date",
+        events: "id, debut, fin",
+        sportSessions: "id, debut, templateId",
+        sportTemplates: "id, createdAt",
+        transactions: "id, date, type",
+        balanceSnapshots: "id, date",
+        budgets: "id, categorie",
+        subscriptions: "id, createdAt",
+        objectives: "id, status, createdAt",
+        noteFolders: "id, parentId, createdAt",
+        notes: "id, updatedAt, epingle, dossierId",
+        hydrationDays: "date",
+        moodDays: "date",
       });
   }
 }

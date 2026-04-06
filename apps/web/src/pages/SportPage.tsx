@@ -10,6 +10,7 @@ import {
 } from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
+import { useSportActiveStore } from "../stores/sportActiveStore";
 
 type SportTab = "historique" | "templates" | "stats";
 
@@ -31,7 +32,11 @@ export function SportPage() {
   const [addOpen, setAddOpen]     = useState(false);
   const [tplOpen, setTplOpen]     = useState(false);
   const [startFrom, setStartFrom] = useState<SportTemplate | null>(null);
+  const [endActiveOpen, setEndActiveOpen] = useState(false);
   const labelRef = useRef<HTMLInputElement>(null);
+  const activeStartMs = useSportActiveStore((s) => s.startMs);
+  const activeLibelle = useSportActiveStore((s) => s.libelle);
+  const stopActive = useSportActiveStore((s) => s.stop);
 
   useEffect(() => {
     void getProfile().then(setProfile);
@@ -91,6 +96,35 @@ export function SportPage() {
           </button>
         </div>
       </header>
+
+      {activeStartMs != null && (
+        <div className="rounded-2xl border border-accent/50 bg-accent/10 p-4">
+          <p className="font-semibold">Séance en cours</p>
+          <p className="text-sm text-muted">
+            {activeLibelle || "Séance"} · démarrée à{" "}
+            {new Date(activeStartMs).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setEndActiveOpen(true)}
+              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white active:scale-95"
+            >
+              Enregistrer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                stopActive();
+                toast.info("Séance annulée");
+              }}
+              className="rounded-xl border border-border px-4 py-2 text-sm text-muted hover:text-[var(--text)]"
+            >
+              Abandonner
+            </button>
+          </div>
+        </div>
+      )}
 
       {profile && <WhoActivityCard profile={profile} sessions={sessions} />}
 
@@ -198,6 +232,7 @@ export function SportPage() {
         template={startFrom}
         labelRef={labelRef}
       />
+      <EndActiveSessionModal open={endActiveOpen} onClose={() => setEndActiveOpen(false)} />
       <AddTemplateModal open={tplOpen} onClose={() => setTplOpen(false)} />
     </div>
   );
@@ -357,6 +392,74 @@ function EmptyState({ icon, msg }: { icon: string; msg: string }) {
   );
 }
 
+/* ═══════════ Fin séance « chrono » ═══════════════════════════════════════ */
+function EndActiveSessionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const startMs = useSportActiveStore((s) => s.startMs);
+  const libelle = useSportActiveStore((s) => s.libelle);
+  const type = useSportActiveStore((s) => s.type);
+  const intensite = useSportActiveStore((s) => s.intensite);
+  const templateId = useSportActiveStore((s) => s.templateId);
+  const stop = useSportActiveStore((s) => s.stop);
+  const [dureeMin, setDureeMin] = useState(45);
+
+  useEffect(() => {
+    if (open && startMs) {
+      setDureeMin(Math.max(5, Math.round((Date.now() - startMs) / 60_000)));
+    }
+  }, [open, startMs]);
+
+  async function save() {
+    if (!startMs) return;
+    const now = Date.now();
+    const s: SportSession = {
+      id: crypto.randomUUID(),
+      type,
+      libelle: libelle.trim() || "Séance",
+      debut: now - dureeMin * 60_000,
+      fin: now,
+      intensite,
+      templateId,
+      createdAt: now,
+    };
+    await db.sportSessions.add(s);
+    stop();
+    toast.ok(`Séance « ${s.libelle} » enregistrée 💪`);
+    onClose();
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Enregistrer la séance">
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Ajuste la durée si besoin (estimée depuis le démarrage du chrono).
+        </p>
+        <div>
+          <div className="mb-1 flex justify-between">
+            <label className="text-sm text-muted">Durée</label>
+            <span className="font-semibold">{dureeMin} min</span>
+          </div>
+          <input
+            type="range"
+            min={5}
+            max={240}
+            step={5}
+            value={dureeMin}
+            onChange={(e) => setDureeMin(Number(e.target.value))}
+            className="w-full accent-[var(--accent)]"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => void save()}
+          className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95"
+        >
+          Valider
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 /* ═══════════ Modal séance ════════════════════════════════════════════════ */
 function AddSessionModal({
   open, onClose, template, labelRef,
@@ -445,6 +548,24 @@ function AddSessionModal({
 
         <textarea rows={2} className="w-full resize-none rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-accent"
           placeholder="Notes (optionnel)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+        <button
+          type="button"
+          onClick={() => {
+            useSportActiveStore.getState().start({
+              libelle: libelle.trim() || "Séance",
+              type,
+              intensite,
+              templateId: template?.id,
+            });
+            toast.ok("Chrono démarré — reviens enregistrer quand tu as fini.");
+            setNotes("");
+            onClose();
+          }}
+          className="w-full rounded-xl border border-border py-3 text-sm font-medium text-muted hover:border-accent hover:text-[var(--text)] active:scale-[0.99]"
+        >
+          Démarrer le chrono (enregistrer plus tard)
+        </button>
 
         <button type="submit" className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95">
           Enregistrer la séance

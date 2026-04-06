@@ -16,6 +16,7 @@ export const defaultPrefs: AppPreferences = {
   accentColor: "#7c3aed",
   fontFamily: "inter",
   textScale: "normal",
+  language: "fr",
   appDisplayName: "MyLife",
   pinEnabled: false,
   biometricEnabled: false,

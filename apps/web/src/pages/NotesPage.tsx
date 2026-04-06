@@ -1,11 +1,13 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { db } from "../db";
-import type { NoteFolder, RichNote } from "@mylife/core";
+import type { NoteFolder, RichNote, RichNoteAttachment } from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
+import { useThemePrefs } from "../theme/ThemeProvider";
+import { t } from "../i18n/strings";
 
 /* ═══════════════════════════════════ Palettes ════════════════════════════ */
 const NOTE_COLORS = [
@@ -41,6 +43,7 @@ type Screen = "grid" | "editor";
 
 /* ═══════════════════════════════════ Page principale ═════════════════════ */
 export function NotesPage() {
+  const { prefs } = useThemePrefs();
   const allFolders = useLiveQuery(() => db.noteFolders.orderBy("createdAt").toArray(), []) ?? [];
   const allNotes   = useLiveQuery(() => db.notes.orderBy("updatedAt").reverse().toArray(), []) ?? [];
 
@@ -69,7 +72,7 @@ export function NotesPage() {
         (n) =>
           n.titre.toLowerCase().includes(q) ||
           n.contenu.toLowerCase().includes(q) ||
-          n.tags.some((t) => t.toLowerCase().includes(q))
+          n.tags.some((tag) => tag.toLowerCase().includes(q))
       );
     }
     const list = allNotes.filter((n) =>
@@ -158,6 +161,9 @@ export function NotesPage() {
   /* ── Vue grille (explorateur) ── */
   return (
     <div className="space-y-3">
+      <p className="text-center text-[0.65rem] leading-snug text-muted">
+        {t("offlineNotes", prefs.language)}
+      </p>
 
       {/* ── Barre de recherche proéminente ── */}
       <div className="relative">
@@ -638,6 +644,7 @@ function NoteEditor({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTagInput, setShowTagInput]   = useState(false);
   const [newTag, setNewTag]               = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [StarterKit],
@@ -694,6 +701,44 @@ function NoteEditor({
     toast.ok("Note déplacée");
   }
 
+  async function onPickAttachment(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.info("Pour l’instant, seules les images sont acceptées.");
+      return;
+    }
+    if (file.size > 600_000) {
+      toast.info("Image trop lourde (max. ~600 Ko).");
+      return;
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(new Error("read"));
+      r.readAsDataURL(file);
+    });
+    const att: RichNoteAttachment = {
+      id: crypto.randomUUID(),
+      fileName: file.name,
+      mimeType: file.type,
+      dataUrl,
+    };
+    await db.notes.update(note.id, {
+      attachments: [...(note.attachments ?? []), att],
+      updatedAt: Date.now(),
+    });
+    toast.ok("Pièce jointe ajoutée");
+  }
+
+  async function removeAttachment(id: string) {
+    await db.notes.update(note.id, {
+      attachments: (note.attachments ?? []).filter((a) => a.id !== id),
+      updatedAt: Date.now(),
+    });
+  }
+
   const textColor = isLightColor(note.bgColor) ? "#12121a" : "#f4f4f8";
 
   return (
@@ -734,6 +779,27 @@ function NoteEditor({
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="my-3 flex flex-wrap items-center gap-2">
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void onPickAttachment(e)} />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="rounded-lg border border-current/25 px-3 py-1.5 text-xs font-medium opacity-80 hover:opacity-100"
+        >
+          📎 Image jointe
+        </button>
+        {(note.attachments ?? []).map((a) => (
+          <span key={a.id} className="inline-flex items-center gap-1 rounded-lg border border-current/20 px-2 py-1 text-xs">
+            <a href={a.dataUrl} download={a.fileName} className="underline opacity-90">
+              {a.fileName}
+            </a>
+            <button type="button" className="opacity-60 hover:opacity-100" onClick={() => void removeAttachment(a.id)} aria-label="Retirer">
+              ✕
+            </button>
+          </span>
+        ))}
       </div>
 
       {/* Tags */}

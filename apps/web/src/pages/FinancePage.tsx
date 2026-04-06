@@ -43,6 +43,7 @@ export function FinancePage() {
   const [soldeOpen, setSoldeOpen]     = useState(false);
   const [filterCat, setFilterCat]     = useState("");
   const [filterType, setFilterType]   = useState<FinanceTxType | "">("");
+  const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6);
   const montantRef = useRef<HTMLInputElement>(null);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -74,8 +75,8 @@ export function FinancePage() {
       if (t.type === "revenu" || t.type === "gain") cur.rev += t.montant;
       m.set(key, cur);
     }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
-  }, [txs]);
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-chartMonths);
+  }, [txs, chartMonths]);
 
   const abonMensuel = useMemo(() => {
     const [ys, ms] = currentMonth.split("-").map(Number);
@@ -150,7 +151,24 @@ export function FinancePage() {
       {/* Graphe */}
       {byMonth.length > 0 && (
         <div className="rounded-2xl border border-border bg-elevated p-4">
-          <p className="mb-3 text-sm font-semibold">6 derniers mois</p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Historique mensuel</p>
+            <div className="flex gap-1 rounded-lg border border-border p-0.5 text-xs">
+              {([3, 6, 12] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setChartMonths(n)}
+                  className={[
+                    "rounded-md px-2 py-1 font-medium",
+                    chartMonths === n ? "bg-accent text-white" : "text-muted hover:text-[var(--text)]",
+                  ].join(" ")}
+                >
+                  {n} m
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex h-28 items-end gap-1">
             {byMonth.map(([mois, v]) => {
               const maxV = Math.max(...byMonth.map(([, x]) => Math.max(x.dep, x.rev)), 1);

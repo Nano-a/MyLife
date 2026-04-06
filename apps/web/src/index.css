@@ -175,3 +175,22 @@ button:active, a:active {
   background: var(--accent);
   animation: ripple 500ms ease-out forwards;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .page-enter,
+  .flame-icon,
+  .check-pop,
+  .ripple-ring,
+  .ring-progress {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,13 +1,17 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useThemePrefs } from "../theme/ThemeProvider";
 import { getProfile, saveProfile } from "../db";
-import type { UserProfile, ThemeId, ActivityLevel, Sex, DndPeriod } from "@mylife/core";
+import type { AppLanguage, UserProfile, ThemeId, ActivityLevel, Sex, DndPeriod } from "@mylife/core";
 import { profileBmi } from "@mylife/core";
 import { hashPin } from "../lib/pin";
 import { useSessionStore } from "../auth/sessionStore";
 import { signOutFirebaseUser } from "../auth/firebaseAuth";
 import { defaultProfile } from "../defaults";
 import { toast } from "../lib/toastStore";
+import { exportDatabaseJson, importDatabaseJson } from "../lib/backup";
+import { requestNotificationPermission } from "../lib/notifications";
+import { registerLocalPasskey, isWebAuthnAvailable } from "../lib/webauthnLocal";
+import { getCloudSyncHint } from "../lib/cloudSyncMeta";
 
 export function SettingsPage() {
   const { prefs, setPrefs } = useThemePrefs();
@@ -20,6 +24,7 @@ export function SettingsPage() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [pinNew, setPinNew] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
+  const importBackupRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void getProfile().then((p) => {
@@ -70,6 +75,71 @@ export function SettingsPage() {
         <h1 className="text-2xl font-bold">Paramètres</h1>
         <p className="text-sm text-muted">Profil, thème, sécurité, notifications.</p>
       </header>
+
+      <section className="space-y-3 rounded-2xl border border-border bg-elevated p-4">
+        <h2 className="font-semibold">Données & synchronisation</h2>
+        <p className="text-sm text-muted leading-relaxed">{getCloudSyncHint()}</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium hover:border-accent active:scale-[0.99]"
+            onClick={() =>
+              void (async () => {
+                const j = await exportDatabaseJson();
+                const blob = new Blob([j], { type: "application/json" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `mylife-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+                toast.ok("Sauvegarde téléchargée");
+              })()
+            }
+          >
+            Exporter JSON
+          </button>
+          <button
+            type="button"
+            className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-[var(--red)] hover:border-[var(--red)] active:scale-[0.99]"
+            onClick={() => importBackupRef.current?.click()}
+          >
+            Importer (remplace tout)
+          </button>
+          <input
+            ref={importBackupRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) =>
+              void (async () => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                try {
+                  const text = await f.text();
+                  await importDatabaseJson(text);
+                  toast.ok("Données importées — rechargement…");
+                  window.setTimeout(() => window.location.reload(), 600);
+                } catch {
+                  toast.info("Import impossible — fichier invalide ?");
+                }
+              })()
+            }
+          />
+        </div>
+        <button
+          type="button"
+          className="w-full rounded-xl border border-border py-2 text-sm text-muted hover:border-accent hover:text-[var(--text)]"
+          onClick={() =>
+            void requestNotificationPermission().then((p) => {
+              if (p === "granted") toast.ok("Notifications autorisées");
+              else toast.info("Permission refusée ou indisponible");
+            })
+          }
+        >
+          Demander la permission notifications (navigateur)
+        </button>
+      </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -190,6 +260,15 @@ export function SettingsPage() {
 
       <section className="space-y-3 rounded-2xl border border-border bg-elevated p-4">
         <h2 className="font-semibold">Apparence</h2>
+        <label className="text-xs text-muted">Langue</label>
+        <select
+          className="w-full rounded-xl border border-border bg-surface px-3 py-2"
+          value={prefs.language ?? "fr"}
+          onChange={(e) => void setPrefs({ language: e.target.value as AppLanguage })}
+        >
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
         <label className="text-xs text-muted">Nom de l’app</label>
         <input
           className="w-full rounded-xl border border-border bg-surface px-3 py-2"
@@ -256,9 +335,41 @@ export function SettingsPage() {
               : "—"}
         </p>
         <p className="text-sm text-muted">
-          PIN actuel : {prefs.pinEnabled ? "activé" : "désactivé"} — biométrie à brancher sur
-          Expo / WebAuthn.
+          PIN : {prefs.pinEnabled ? "activé" : "désactivé"}
+          {" · "}
+          Passkey :{" "}
+          {!isWebAuthnAvailable()
+            ? "navigateur incompatible"
+            : prefs.webAuthnCredentialIds
+              ? "configurée sur cet appareil"
+              : "non configurée"}
         </p>
+        <button
+          type="button"
+          disabled={!isWebAuthnAvailable()}
+          className="w-full rounded-xl border border-border py-2 text-sm font-medium text-muted hover:border-accent hover:text-[var(--text)] disabled:opacity-40"
+          onClick={() =>
+            void (async () => {
+              const id = await registerLocalPasskey();
+              if (!id) {
+                toast.info("Enregistrement annulé ou impossible.");
+                return;
+              }
+              let ids: string[] = [];
+              try {
+                ids = prefs.webAuthnCredentialIds ? (JSON.parse(prefs.webAuthnCredentialIds) as string[]) : [];
+              } catch {
+                ids = [];
+              }
+              if (!Array.isArray(ids)) ids = [];
+              ids.push(id);
+              await setPrefs({ webAuthnCredentialIds: JSON.stringify(ids), biometricEnabled: true });
+              toast.ok("Passkey ajoutée — déverrouillage biométrique disponible.");
+            })()
+          }
+        >
+          Ajouter une passkey (déverrouillage)
+        </button>
         <input
           type="password"
           inputMode="numeric"

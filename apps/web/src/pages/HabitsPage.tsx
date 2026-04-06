@@ -15,6 +15,7 @@ type HabitTab = "aujourdhui" | "toutes" | "archives";
 export function HabitsPage() {
   const date   = todayISO();
   const habits = useLiveQuery(() => db.habits.toArray(), []) ?? [];
+  const objectives = useLiveQuery(() => db.objectives.toArray(), []) ?? [];
   const completions = useLiveQuery(
     () => db.habitCompletions.where("date").equals(date).toArray(), [date]) ?? [];
   const allCompletions = useLiveQuery(() => db.habitCompletions.toArray(), []) ?? [];
@@ -34,7 +35,14 @@ export function HabitsPage() {
     completions.some((c) => c.id === `${h.id}_${date}` && c.fait)).length;
 
   /* ── Ajouter ── */
-  async function addHabit(nom: string, icone: string, couleur: string, frequence: Habit["frequence"], jours?: number[]) {
+  async function addHabit(
+    nom: string,
+    icone: string,
+    couleur: string,
+    frequence: Habit["frequence"],
+    jours?: number[],
+    linkedObjectiveId?: string
+  ) {
     const h: Habit = {
       id: crypto.randomUUID(),
       nom: nom.trim(),
@@ -44,6 +52,7 @@ export function HabitsPage() {
       frequence,
       joursSemaine: frequence === "jours_specifiques" ? jours : undefined,
       categorie: "perso",
+      linkedObjectiveId: linkedObjectiveId || undefined,
       createdAt: Date.now(),
     };
     await db.habits.add(h);
@@ -162,9 +171,20 @@ export function HabitsPage() {
       )}
 
       {/* Modals */}
-      <AddHabitModal open={addOpen} onClose={() => setAddOpen(false)} nomRef={nomRef} onAdd={addHabit} />
+      <AddHabitModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        nomRef={nomRef}
+        objectives={objectives}
+        onAdd={addHabit}
+      />
       {editHabit && (
-        <EditHabitModal habit={editHabit} onClose={() => setEditHabit(null)} onSave={saveEdit} />
+        <EditHabitModal
+          key={editHabit.id}
+          habit={editHabit}
+          onClose={() => setEditHabit(null)}
+          onSave={saveEdit}
+        />
       )}
       {statsHabit && (
         <HabitStatsModal habit={statsHabit} completions={allCompletions} onClose={() => setStatsHabit(null)} />
@@ -248,19 +268,28 @@ function ActionBtn({ onClick, label, icon, danger }: { onClick: () => void; labe
 
 /* ═══════════ Modal ajouter ═══════════════════════════════════════════════ */
 function AddHabitModal({
-  open, onClose, nomRef,
+  open, onClose, nomRef, objectives,
   onAdd,
 }: {
   open: boolean;
   onClose: () => void;
   nomRef: React.RefObject<HTMLInputElement | null>;
-  onAdd: (nom: string, icone: string, couleur: string, frequence: Habit["frequence"], jours?: number[]) => void;
+  objectives: { id: string; titre: string }[];
+  onAdd: (
+    nom: string,
+    icone: string,
+    couleur: string,
+    frequence: Habit["frequence"],
+    jours?: number[],
+    linkedObjectiveId?: string
+  ) => void;
 }) {
   const [nom, setNom]         = useState("");
   const [icone, setIcone]     = useState("✅");
   const [couleur, setCouleur] = useState("#7c3aed");
   const [frequence, setFrequence] = useState<Habit["frequence"]>("quotidien");
   const [jours, setJours]     = useState<number[]>([1,2,3,4,5]);
+  const [linkedObjectiveId, setLinkedObjectiveId] = useState("");
 
   const COULEURS = ["#7c3aed","#2563eb","#059669","#dc2626","#d97706","#db2777","#0891b2","#65a30d"];
   const JOURS_LABELS = ["D","L","M","M","J","V","S"];
@@ -268,8 +297,8 @@ function AddHabitModal({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!nom.trim()) return;
-    onAdd(nom, icone, couleur, frequence, jours);
-    setNom(""); setIcone("✅");
+    onAdd(nom, icone, couleur, frequence, jours, linkedObjectiveId || undefined);
+    setNom(""); setIcone("✅"); setLinkedObjectiveId("");
   }
 
   return (
@@ -329,6 +358,20 @@ function AddHabitModal({
           </div>
         )}
 
+        <div>
+          <label className="text-xs text-muted">Lier à un objectif (optionnel)</label>
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={linkedObjectiveId}
+            onChange={(e) => setLinkedObjectiveId(e.target.value)}
+          >
+            <option value="">— Aucun —</option>
+            {objectives.map((o) => (
+              <option key={o.id} value={o.id}>{o.titre}</option>
+            ))}
+          </select>
+        </div>
+
         <button type="submit" className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95">
           Créer l'habitude
         </button>
@@ -341,9 +384,11 @@ function AddHabitModal({
 function EditHabitModal({
   habit, onClose, onSave,
 }: { habit: Habit; onClose: () => void; onSave: (p: Partial<Habit>) => void }) {
+  const objectives = useLiveQuery(() => db.objectives.toArray(), []) ?? [];
   const [nom, setNom]     = useState(habit.nom);
   const [icone, setIcone] = useState(habit.icone);
   const [couleur, setCouleur] = useState(habit.couleur);
+  const [linkedObjectiveId, setLinkedObjectiveId] = useState(habit.linkedObjectiveId ?? "");
   const COULEURS = ["#7c3aed","#2563eb","#059669","#dc2626","#d97706","#db2777","#0891b2","#65a30d"];
 
   return (
@@ -363,8 +408,30 @@ function EditHabitModal({
               style={{ background: c, borderColor: couleur === c ? "var(--text)" : "transparent" }} />
           ))}
         </div>
+        <div>
+          <label className="text-xs text-muted">Objectif lié</label>
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={linkedObjectiveId}
+            onChange={(e) => setLinkedObjectiveId(e.target.value)}
+          >
+            <option value="">— Aucun —</option>
+            {objectives.map((o) => (
+              <option key={o.id} value={o.id}>{o.titre}</option>
+            ))}
+          </select>
+        </div>
         <button type="button"
-          onClick={() => { if (nom.trim()) onSave({ nom: nom.trim(), icone, couleur }); }}
+          onClick={() => {
+            if (nom.trim()) {
+              onSave({
+                nom: nom.trim(),
+                icone,
+                couleur,
+                linkedObjectiveId: linkedObjectiveId || undefined,
+              });
+            }
+          }}
           className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95">
           Enregistrer
         </button>
