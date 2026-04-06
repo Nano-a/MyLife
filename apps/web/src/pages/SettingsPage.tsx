@@ -774,7 +774,7 @@ function NowMarker({ pct }: { pct: (m: number) => string }) {
   );
 }
 
-/* Bouton toggle pill */
+/* Interrupteur : pouce ancré à gauche (évite position « inversée » et débordement) */
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -782,13 +782,13 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
+      className={`relative h-6 w-11 shrink-0 overflow-hidden rounded-full transition-colors duration-200 ${
         checked ? "bg-accent" : "bg-border"
       }`}
     >
       <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          checked ? "translate-x-5" : "translate-x-0.5"
+        className={`pointer-events-none absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform duration-200 ease-out ${
+          checked ? "translate-x-[1.25rem]" : "translate-x-0"
         }`}
       />
     </button>
