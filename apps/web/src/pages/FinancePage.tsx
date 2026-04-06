@@ -1,13 +1,27 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useRef, useState } from "react";
 import { db } from "../db";
-import type { FinanceBudget, FinanceTransaction, FinanceTxType } from "@mylife/core";
+import type {
+  FinanceBudget,
+  FinanceSubscription,
+  FinanceTransaction,
+  FinanceTxType,
+  SubscriptionBillingPeriod,
+} from "@mylife/core";
+import {
+  describeSubscriptionPeriod,
+  MOIS_COURTS,
+  nextChargeDate,
+  subscriptionAmountForMonth,
+} from "@mylife/core";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
 
 /* ─── Constantes ───────────────────────────────────────────────────────── */
 const CAT_DEPENSE  = ["alimentation","loisirs","transport","abonnement","soin","vêtements","logement","autre"];
 const CAT_REVENU   = ["salaire","freelance","vente","cadeau","investissement","autre"];
+/** Septembre → juin (année scolaire), indices 0–11 */
+const MOIS_SCOLAIRE = [8, 9, 10, 11, 0, 1, 2, 3, 4, 5];
 const EMOJI_TYPE: Record<FinanceTxType, string> = {
   depense: "💸", revenu: "💰", abonnement: "🔄", gain: "📈", epargne: "🏦",
 };
@@ -20,9 +34,11 @@ export function FinancePage() {
   const txs   = useLiveQuery(() => db.transactions.orderBy("date").reverse().toArray(), []) ?? [];
   const snaps = useLiveQuery(() => db.balanceSnapshots.orderBy("date").reverse().toArray(), []) ?? [];
   const buds  = useLiveQuery(() => db.budgets.toArray(), []) ?? [];
+  const subs  = useLiveQuery(() => db.subscriptions.toArray(), []) ?? [];
 
   const [tab, setTab]       = useState<Tab>("transactions");
   const [addTxOpen, setAddTxOpen]     = useState(false);
+  const [addSubOpen, setAddSubOpen]   = useState(false);
   const [addBudOpen, setAddBudOpen]   = useState(false);
   const [soldeOpen, setSoldeOpen]     = useState(false);
   const [filterCat, setFilterCat]     = useState("");
@@ -33,7 +49,7 @@ export function FinancePage() {
 
   const soldeReel       = snaps[0]?.solde ?? null;
   const txsThisMonth    = txs.filter((t) => t.date.startsWith(currentMonth));
-  const depMois         = txsThisMonth.reduce((s, t) => s + (t.type === "depense" || t.type === "abonnement" ? t.montant : 0), 0);
+  const depMois         = txsThisMonth.reduce((s, t) => s + (t.type === "depense" ? t.montant : 0), 0);
   const revMois         = txsThisMonth.reduce((s, t) => s + (t.type === "revenu" || t.type === "gain" ? t.montant : 0), 0);
   const superfluSum     = useMemo(() =>
     txs.reduce((s, t) => s + (t.type === "depense" && t.superflue ? t.montant : 0), 0), [txs]);
@@ -54,20 +70,25 @@ export function FinancePage() {
     for (const t of txs) {
       const key = t.date.slice(0, 7);
       const cur = m.get(key) ?? { dep: 0, rev: 0 };
-      if (t.type === "depense" || t.type === "abonnement") cur.dep += t.montant;
+      if (t.type === "depense") cur.dep += t.montant;
       if (t.type === "revenu" || t.type === "gain") cur.rev += t.montant;
       m.set(key, cur);
     }
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
   }, [txs]);
 
-  /* Abonnements */
-  const abonnements = txs.filter((t) => t.type === "abonnement");
-  const abonMensuel = abonnements.reduce((s, t) => {
-    const mois = t.frequenceMois ?? 1;
-    return s + t.montant / mois;
-  }, 0);
-  const abonAnnuel = abonMensuel * 12;
+  const abonMensuel = useMemo(() => {
+    const [ys, ms] = currentMonth.split("-").map(Number);
+    return subs.reduce((s, sub) => s + subscriptionAmountForMonth(sub, ys!, ms! - 1), 0);
+  }, [subs, currentMonth]);
+  const abonAnnuel = useMemo(() => {
+    const y = Number(currentMonth.slice(0, 4));
+    let total = 0;
+    for (const sub of subs) {
+      for (let m0 = 0; m0 < 12; m0++) total += subscriptionAmountForMonth(sub, y, m0);
+    }
+    return total;
+  }, [subs, currentMonth]);
 
   /* Filtres transactions */
   const filtered = useMemo(() => {
@@ -86,6 +107,12 @@ export function FinancePage() {
     if (!confirm("Supprimer ce budget ?")) return;
     await db.budgets.delete(id);
     toast.info("Budget supprimé");
+  }
+
+  async function deleteSubscription(id: string) {
+    if (!confirm("Supprimer cet abonnement récurrent ?")) return;
+    await db.subscriptions.delete(id);
+    toast.info("Abonnement supprimé");
   }
 
   return (
@@ -171,7 +198,7 @@ export function FinancePage() {
               onChange={(e) => setFilterType(e.target.value as FinanceTxType | "")}
             >
               <option value="">Tous types</option>
-              {(["depense","revenu","abonnement","gain","epargne"] as FinanceTxType[]).map((t) => (
+              {(["depense","revenu","gain","epargne"] as FinanceTxType[]).map((t) => (
                 <option key={t} value={t}>{EMOJI_TYPE[t]} {t}</option>
               ))}
             </select>
@@ -268,28 +295,50 @@ export function FinancePage() {
       {/* ── Onglet Abonnements ── */}
       {tab === "abonnements" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard label="Total / mois"  value={`${Math.round(abonMensuel).toLocaleString("fr-FR")} €`} />
-            <KpiCard label="Total / an"    value={`${Math.round(abonAnnuel).toLocaleString("fr-FR")} €`} />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setAddSubOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white active:scale-95"
+            >
+              + Abonnement récurrent
+            </button>
           </div>
-          {abonnements.length === 0 ? (
-            <EmptyState icon="🔄" msg="Aucun abonnement enregistré" />
+          <p className="text-sm text-muted">
+            Tu le configures une seule fois (montant, jour, mois concernés, fin ou pour toujours). Les prochains prélèvements sont calculés automatiquement.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="Engagé ce mois-ci" value={`${Math.round(abonMensuel).toLocaleString("fr-FR")} €`} />
+            <KpiCard label="Sur l’année" value={`${Math.round(abonAnnuel).toLocaleString("fr-FR")} €`} />
+          </div>
+          {subs.length === 0 ? (
+            <EmptyState icon="🔄" msg="Aucun abonnement — ajoute par ex. ton forfait (chaque mois) ou la SNCF (sept. → juin, chaque année)" />
           ) : (
             <ul className="space-y-2">
-              {abonnements.map((t) => (
-                <li key={t.id} className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-4 py-3">
-                  <span className="text-xl">🔄</span>
-                  <div className="flex-1">
-                    <p className="font-medium">{t.commentaire ?? t.categorie}</p>
-                    <p className="text-sm text-muted">
-                      {t.montant.toLocaleString("fr-FR")} € / {t.frequenceMois === 12 ? "an" : "mois"}
-                      {t.prochainPrelevement && ` · Prochain : ${t.prochainPrelevement}`}
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => void deleteTransaction(t.id)}
-                    className="text-muted hover:text-[var(--red)]">✕</button>
-                </li>
-              ))}
+              {subs.map((sub) => {
+                const next = nextChargeDate(sub);
+                return (
+                  <li key={sub.id} className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-4 py-3">
+                    <span className="text-xl">🔄</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{sub.libelle}</p>
+                      <p className="text-sm text-muted">
+                        {sub.montant.toLocaleString("fr-FR")} € · {describeSubscriptionPeriod(sub)}
+                        {next && ` · Prochain : ${next}`}
+                        {!next && " · (terminé ou hors période)"}
+                      </p>
+                      {sub.commentaire && <p className="text-xs text-muted truncate">{sub.commentaire}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void deleteSubscription(sub.id)}
+                      className="shrink-0 text-muted hover:text-[var(--red)]"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -297,6 +346,7 @@ export function FinancePage() {
 
       {/* Modals */}
       <AddTxModal open={addTxOpen} onClose={() => setAddTxOpen(false)} montantRef={montantRef} />
+      <AddSubscriptionModal open={addSubOpen} onClose={() => setAddSubOpen(false)} />
       <AddBudgetModal open={addBudOpen} onClose={() => setAddBudOpen(false)} />
       <UpdateBalanceModal open={soldeOpen} current={soldeReel ?? 0} onClose={() => setSoldeOpen(false)} />
     </div>
@@ -373,8 +423,6 @@ function AddTxModal({
   const [montant, setMontant]     = useState("");
   const [categorie, setCategorie] = useState("alimentation");
   const [commentaire, setComment] = useState("");
-  const [frequence, setFrequence] = useState(1);
-  const [prochain, setProchain]   = useState("");
 
   const cats = type === "revenu" || type === "gain" ? CAT_REVENU : CAT_DEPENSE;
 
@@ -389,8 +437,6 @@ function AddTxModal({
       categorie,
       commentaire: commentaire.trim() || undefined,
       date: new Date().toISOString().slice(0, 10),
-      frequenceMois: type === "abonnement" ? frequence : undefined,
-      prochainPrelevement: type === "abonnement" && prochain ? prochain : undefined,
       createdAt: Date.now(),
     });
     toast.ok(`${EMOJI_TYPE[type]} ${m.toLocaleString("fr-FR")} € enregistré`);
@@ -402,18 +448,21 @@ function AddTxModal({
       <form onSubmit={submit} className="space-y-4">
         {/* Type */}
         <div className="flex flex-wrap gap-2">
-          {(["depense","revenu","gain","epargne","abonnement"] as FinanceTxType[]).map((ty) => (
+          {(["depense","revenu","gain","epargne"] as FinanceTxType[]).map((ty) => (
             <button key={ty} type="button"
               onClick={() => { setType(ty); setCategorie(ty === "revenu" || ty === "gain" ? "salaire" : "alimentation"); }}
               className={["flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm",
                 type === ty ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}
             >
               {EMOJI_TYPE[ty]}{" "}
-              {ty === "abonnement" ? "Abonnement" : ty === "depense" ? "Dépense" :
+              {ty === "depense" ? "Dépense" :
                ty === "revenu" ? "Revenu" : ty === "epargne" ? "Épargne" : "Gain"}
             </button>
           ))}
         </div>
+        <p className="text-xs text-muted">
+          Pour un prélèvement automatique (forfait, abonnement, etc.), utilise l’onglet <strong>Abonnements</strong>.
+        </p>
 
         <input
           ref={montantRef}
@@ -442,35 +491,243 @@ function AddTxModal({
           onChange={(e) => setComment(e.target.value)}
         />
 
-        {/* Champs abonnement */}
-        {type === "abonnement" && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-muted">Fréquence</label>
-              <select
-                className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
-                value={frequence}
-                onChange={(e) => setFrequence(Number(e.target.value))}
-              >
-                <option value={1}>Mensuel</option>
-                <option value={3}>Trimestriel</option>
-                <option value={12}>Annuel</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted">Prochain prélèvement</label>
+        <button type="submit" className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95">
+          Enregistrer
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function AddSubscriptionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [libelle, setLibelle]         = useState("");
+  const [montant, setMontant]         = useState("");
+  const [categorie, setCategorie]     = useState("abonnement");
+  const [commentaire, setCommentaire] = useState("");
+  const [period, setPeriod]           = useState<SubscriptionBillingPeriod>("monthly");
+  const [jour, setJour]             = useState(5);
+  const [tousLesMois, setTousLesMois] = useState(true);
+  const [moisSel, setMoisSel]       = useState<Set<number>>(() => new Set(MOIS_SCOLAIRE));
+  const [sansFin, setSansFin]         = useState(true);
+  const [finLe, setFinLe]           = useState("");
+  const [dateDebut, setDateDebut]     = useState(today);
+
+  function toggleMois(m: number) {
+    setMoisSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(m)) n.delete(m);
+      else n.add(m);
+      return n;
+    });
+  }
+
+  function presetScolaire() {
+    setTousLesMois(false);
+    setMoisSel(new Set(MOIS_SCOLAIRE));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const m = Number(montant.replace(",", "."));
+    if (!libelle.trim() || !m || m <= 0) return;
+    if (!sansFin && !finLe) return;
+    if (!tousLesMois && moisSel.size === 0) return;
+
+    const moisActifs = tousLesMois ? undefined : [...moisSel].sort((a, b) => a - b);
+    const sub: FinanceSubscription = {
+      id: crypto.randomUUID(),
+      libelle: libelle.trim(),
+      montant: m,
+      categorie,
+      commentaire: commentaire.trim() || undefined,
+      jourPrelevement: period === "daily" ? 1 : Math.min(31, Math.max(1, jour)),
+      period,
+      moisActifs,
+      sansFin,
+      finLe: sansFin ? undefined : finLe,
+      dateDebut,
+      createdAt: Date.now(),
+    };
+    await db.subscriptions.add(sub);
+    toast.ok(`Abonnement « ${sub.libelle} » enregistré`);
+    setLibelle("");
+    setMontant("");
+    setCommentaire("");
+    setTousLesMois(true);
+    setSansFin(true);
+    setFinLe("");
+    setDateDebut(new Date().toISOString().slice(0, 10));
+    onClose();
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Abonnement récurrent">
+      <form onSubmit={submit} className="max-h-[75vh] space-y-3 overflow-y-auto pr-1">
+        <input
+          className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2.5 font-medium outline-none focus:border-accent"
+          placeholder="Libellé (ex. Forfait SFR, Pass SNCF…)"
+          value={libelle}
+          onChange={(e) => setLibelle(e.target.value)}
+          autoFocus
+        />
+        <input
+          type="number"
+          inputMode="decimal"
+          className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2.5 text-lg font-semibold outline-none focus:border-accent"
+          placeholder="Montant (€)"
+          value={montant}
+          onChange={(e) => setMontant(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-2">
+          {CAT_DEPENSE.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategorie(c)}
+              className={[
+                "rounded-xl border px-3 py-1.5 text-sm capitalize",
+                categorie === c ? "border-accent bg-accent/10 text-accent" : "border-border text-muted",
+              ].join(" ")}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        <input
+          className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-accent"
+          placeholder="Note (optionnel)"
+          value={commentaire}
+          onChange={(e) => setCommentaire(e.target.value)}
+        />
+
+        <div>
+          <label className="text-xs text-muted">Rythme</label>
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as SubscriptionBillingPeriod)}
+          >
+            <option value="monthly">Chaque mois (même jour)</option>
+            <option value="yearly">Une fois par an (mois = date de référence ci-dessous)</option>
+            <option value="daily">Chaque jour (montant / jour)</option>
+          </select>
+        </div>
+
+        {period !== "daily" && (
+          <div>
+            <label className="text-xs text-muted">Jour du prélèvement dans le mois (1–31)</label>
+            <input
+              type="number"
+              min={1}
+              max={31}
+              className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+              value={jour}
+              onChange={(e) => setJour(Number(e.target.value) || 1)}
+            />
+          </div>
+        )}
+
+        <div>
+          <label className="text-xs text-muted">Date de début / référence</label>
+          <input
+            type="date"
+            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+            value={dateDebut}
+            onChange={(e) => setDateDebut(e.target.value)}
+          />
+          {period === "yearly" && (
+            <p className="mt-1 text-xs text-muted">Le mois de cette date fixe le mois annuel du prélèvement.</p>
+          )}
+        </div>
+
+        {period !== "daily" && (
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
               <input
-                type="date"
-                className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
-                value={prochain}
-                onChange={(e) => setProchain(e.target.value)}
+                type="checkbox"
+                checked={tousLesMois}
+                onChange={(e) => setTousLesMois(e.target.checked)}
               />
-            </div>
+              Tous les mois de l’année
+            </label>
+            {!tousLesMois && (
+              <>
+                <button
+                  type="button"
+                  onClick={presetScolaire}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-[var(--text)]"
+                >
+                  Préréglage rentrée : sept. → juin (hors juil. / août)
+                </button>
+                <div className="flex flex-wrap gap-1.5">
+                  {MOIS_COURTS.map((label, m0) => (
+                    <button
+                      key={m0}
+                      type="button"
+                      onClick={() => toggleMois(m0)}
+                      className={[
+                        "rounded-lg border px-2 py-1 text-xs",
+                        moisSel.has(m0) ? "border-accent bg-accent/15 text-accent" : "border-border text-muted",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {period === "daily" && (
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={tousLesMois}
+                onChange={(e) => setTousLesMois(e.target.checked)}
+              />
+              Tous les mois
+            </label>
+            {!tousLesMois && (
+              <div className="flex flex-wrap gap-1.5">
+                {MOIS_COURTS.map((label, m0) => (
+                  <button
+                    key={m0}
+                    type="button"
+                    onClick={() => toggleMois(m0)}
+                    className={[
+                      "rounded-lg border px-2 py-1 text-xs",
+                      moisSel.has(m0) ? "border-accent bg-accent/15 text-accent" : "border-border text-muted",
+                    ].join(" ")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={sansFin} onChange={(e) => setSansFin(e.target.checked)} />
+          Sans date de fin (toute la vie / contrat indéterminé)
+        </label>
+        {!sansFin && (
+          <div>
+            <label className="text-xs text-muted">Dernier prélèvement possible</label>
+            <input
+              type="date"
+              className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+              value={finLe}
+              onChange={(e) => setFinLe(e.target.value)}
+            />
           </div>
         )}
 
         <button type="submit" className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95">
-          Enregistrer
+          Enregistrer l’abonnement
         </button>
       </form>
     </Modal>

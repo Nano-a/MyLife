@@ -4,6 +4,7 @@ import type {
   AppPreferences,
   FinanceBalanceSnapshot,
   FinanceBudget,
+  FinanceSubscription,
   FinanceTransaction,
   Habit,
   HabitCompletion,
@@ -36,6 +37,7 @@ export class MyLifeDB extends Dexie {
   transactions!: EntityTable<FinanceTransaction, "id">;
   balanceSnapshots!: EntityTable<FinanceBalanceSnapshot, "id">;
   budgets!: EntityTable<FinanceBudget, "id">;
+  subscriptions!: EntityTable<FinanceSubscription, "id">;
   objectives!: EntityTable<Objective, "id">;
   noteFolders!: EntityTable<NoteFolder, "id">;
   notes!: EntityTable<RichNote, "id">;
@@ -82,6 +84,45 @@ export class MyLifeDB extends Dexie {
             if (!note.bgColor) note.bgColor = "#18181f";
             if (!note.tags) note.tags = [];
           });
+      });
+
+    this.version(3)
+      .stores({
+        settings: "key",
+        habits: "id, createdAt, archived",
+        habitCompletions: "id, habitId, date",
+        events: "id, debut, fin",
+        sportSessions: "id, debut, templateId",
+        sportTemplates: "id, createdAt",
+        transactions: "id, date, type",
+        balanceSnapshots: "id, date",
+        budgets: "id, categorie",
+        subscriptions: "id, createdAt",
+        objectives: "id, status, createdAt",
+        noteFolders: "id, parentId, createdAt",
+        notes: "id, updatedAt, epingle, dossierId",
+        hydrationDays: "date",
+      })
+      .upgrade(async (tx) => {
+        const rows = await tx.table("transactions").toArray();
+        for (const t of rows as FinanceTransaction[]) {
+          if (t.type !== "abonnement") continue;
+          const j = parseInt(String(t.date).slice(8, 10), 10) || 1;
+          await tx.table("subscriptions").add({
+            id: crypto.randomUUID(),
+            libelle: String(t.commentaire || t.categorie || "Abonnement").slice(0, 120),
+            montant: t.montant,
+            categorie: t.categorie,
+            commentaire: t.commentaire,
+            jourPrelevement: j,
+            period: t.frequenceMois && t.frequenceMois >= 12 ? "yearly" : "monthly",
+            moisActifs: undefined,
+            sansFin: true,
+            dateDebut: t.date,
+            createdAt: typeof t.createdAt === "number" ? t.createdAt : Date.now(),
+          });
+          await tx.table("transactions").delete(t.id);
+        }
       });
   }
 }

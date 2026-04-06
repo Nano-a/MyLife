@@ -88,9 +88,20 @@ export function AgendaPage() {
   const rawEvents = useLiveQuery(() => db.events.orderBy("debut").toArray(), []) ?? [];
   const { start, end } = useMemo(() => getWindowBounds(view, refDate), [view, refDate]);
 
+  const monthExpandBounds = useMemo(() => {
+    const y = refDate.getFullYear();
+    const m = refDate.getMonth();
+    return { mStart: new Date(y, m, 1).getTime(), mEnd: new Date(y, m + 1, 1).getTime() };
+  }, [refDate]);
+
   /* Expansion récurrences */
   const events = useMemo(() =>
     rawEvents.flatMap((e) => expandEvent(e, start, end)), [rawEvents, start, end]);
+
+  const monthExpandedEvents = useMemo(
+    () => rawEvents.flatMap((e) => expandEvent(e, monthExpandBounds.mStart, monthExpandBounds.mEnd)),
+    [rawEvents, monthExpandBounds.mStart, monthExpandBounds.mEnd]
+  );
 
   const sortedEvents = useMemo(() =>
     [...events].sort((a, b) => a.debut - b.debut), [events]);
@@ -176,7 +187,13 @@ export function AgendaPage() {
       )}
 
       {/* ── Vue mois ── */}
-      {view === "mois" && <MonthView events={rawEvents} refDate={refDate} onDayClick={(d) => { setRef(d); setView("jour"); }} />}
+      {view === "mois" && (
+        <MonthView
+          events={monthExpandedEvents}
+          refDate={refDate}
+          onDayClick={(d) => { setRef(d); setView("jour"); }}
+        />
+      )}
 
       {/* Liste compacte (toujours visible) */}
       {view !== "mois" && sortedEvents.length === 0 && (
@@ -367,7 +384,13 @@ function AddEventModal({
       categorie,
       notificationPersistante: persist,
       recurrence,
-      recurrenceEnd: recEnd ? new Date(recEnd).getTime() : undefined,
+      recurrenceEnd: recEnd
+        ? (() => {
+            const x = new Date(recEnd + "T12:00:00");
+            x.setHours(23, 59, 59, 999);
+            return x.getTime();
+          })()
+        : undefined,
       createdAt: now,
     };
     await db.events.add(ev);
@@ -440,10 +463,13 @@ function AddEventModal({
         </div>
         {recurrence !== "once" && (
           <div>
-            <label className="text-xs text-muted">Fin de répétition (optionnel)</label>
+            <label className="text-xs text-muted">Dernier jour inclus (optionnel)</label>
             <input type="date"
               className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
               value={recEnd} onChange={(e) => setRecEnd(e.target.value)} />
+            <p className="mt-1 text-xs text-muted">
+              Ex. emploi du temps : « Toutes les semaines » puis la date du dernier cours avant les vacances — les répétitions s’arrêtent après ce jour.
+            </p>
           </div>
         )}
 
@@ -500,7 +526,24 @@ function EditEventModal({
           {event.lieu && <p><span className="text-muted">Lieu :</span> 📍 {event.lieu}</p>}
           {event.description && <p className="text-muted">{event.description}</p>}
           {event.recurrence !== "once" && (
-            <p><span className="text-muted">Répétition :</span> 🔄 {RECURRENCE_LABELS[event.recurrence]}</p>
+            <p>
+              <span className="text-muted">Répétition :</span> 🔄 {RECURRENCE_LABELS[event.recurrence]}
+              {event.recurrenceEnd != null && (
+                <>
+                  {" "}
+                  <span className="text-muted">
+                    (jusqu’au{" "}
+                    {new Date(event.recurrenceEnd).toLocaleDateString("fr-FR", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                    , inclus)
+                  </span>
+                </>
+              )}
+            </p>
           )}
         </div>
 

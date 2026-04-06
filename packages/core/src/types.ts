@@ -172,6 +172,32 @@ export interface FinanceBalanceSnapshot {
   solde: number;
 }
 
+/** Période de facturation d’un abonnement enregistré une seule fois */
+export type SubscriptionBillingPeriod = "daily" | "monthly" | "yearly";
+
+/**
+ * Abonnement / prélèvement automatique : tu le configures une fois,
+ * l’app calcule les prochains prélèvements (mois choisis, fin ou pour toujours).
+ */
+export interface FinanceSubscription {
+  id: string;
+  libelle: string;
+  montant: number;
+  categorie: string;
+  commentaire?: string;
+  /** Jour du mois (1–31) pour mensuel / annuel */
+  jourPrelevement: number;
+  period: SubscriptionBillingPeriod;
+  /** Mois 0–11 où le prélèvement a lieu (vide = tous les mois). Ex. SNCF sept–juin : [8,9,10,11,0,1,2,3,4,5] */
+  moisActifs?: number[];
+  sansFin: boolean;
+  /** Dernier jour possible (YYYY-MM-DD), si sansFin = false */
+  finLe?: string;
+  /** Date d’ancrage du contrat (premier prélèvement connu) */
+  dateDebut: string;
+  createdAt: number;
+}
+
 export interface FinanceBudget {
   id: string;
   categorie: string;
