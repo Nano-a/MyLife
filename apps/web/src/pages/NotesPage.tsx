@@ -39,6 +39,44 @@ const FOLDER_TINTS = [
 
 type Screen = "grid" | "editor";
 
+/** Profondeur d’un dossier (0 = racine). */
+function folderDepth(folderId: string, all: NoteFolder[]): number {
+  const map = new Map(all.map((f) => [f.id, f]));
+  let d = 0;
+  let cur = map.get(folderId);
+  while (cur?.parentId) {
+    d++;
+    cur = map.get(cur.parentId);
+  }
+  return d;
+}
+
+/** Liste dossiers : parents avant enfants, ordre alpha par niveau. */
+function foldersOrderedForSelect(all: NoteFolder[]): NoteFolder[] {
+  const children = new Map<string | null, NoteFolder[]>();
+  for (const f of all) {
+    const p = f.parentId ?? null;
+    if (!children.has(p)) children.set(p, []);
+    children.get(p)!.push(f);
+  }
+  for (const [, arr] of children) arr.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const out: NoteFolder[] = [];
+  function walk(pid: string | null) {
+    for (const c of children.get(pid) ?? []) {
+      out.push(c);
+      walk(c.id);
+    }
+  }
+  walk(null);
+  return out;
+}
+
+function folderOptionLabel(f: NoteFolder, all: NoteFolder[]): string {
+  const d = folderDepth(f.id, all);
+  const indent = d > 0 ? `${"· ".repeat(d)}` : "";
+  return `${indent}${f.icone} ${f.nom}`;
+}
+
 /* ═══════════════════════════════════ Page principale ═════════════════════ */
 export function NotesPage() {
   const allFolders = useLiveQuery(() => db.noteFolders.orderBy("createdAt").toArray(), []) ?? [];
@@ -52,6 +90,7 @@ export function NotesPage() {
   const [activeId, setActiveId]           = useState<string | null>(null);
   const [screen, setScreen]               = useState<Screen>("grid");
   const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [editFolderTarget, setEditFolderTarget] = useState<NoteFolder | null>(null);
 
   /* Sous-dossiers au niveau courant */
   const currentFolders = useMemo(
@@ -137,16 +176,26 @@ export function NotesPage() {
   if (screen === "editor" && activeNote) {
     return (
       <div className="flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={() => setScreen("grid")}
-          className="flex items-center gap-2 self-start text-sm text-muted hover:text-[var(--text)]"
-        >
-          ← Retour aux notes
-        </button>
+        <div className="sticky top-0 z-30 -mx-1 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-[var(--surface)]/95 px-1 py-2 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setScreen("grid")}
+            className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-[var(--text)] hover:border-accent"
+          >
+            ← Retour
+          </button>
+          <button
+            type="button"
+            onClick={() => setScreen("grid")}
+            className="rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-accent/25 hover:opacity-95"
+          >
+            Terminé
+          </button>
+        </div>
         <NoteEditor
           note={activeNote}
           folders={allFolders}
+          onClose={() => setScreen("grid")}
           onDelete={() => void deleteNote(activeNote)}
         />
       </div>
@@ -185,9 +234,13 @@ export function NotesPage() {
       </div>
 
       {/* ── Breadcrumb + actions ── */}
-      <div className="flex items-center gap-2">
-        {/* Fil d'ariane */}
-        <nav className="flex flex-1 items-center gap-0.5 overflow-x-auto text-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+        {/* Fil d'ariane (chemin cliquable) */}
+        <nav
+          aria-label="Chemin des dossiers"
+          className="flex flex-1 items-center gap-0.5 overflow-x-auto text-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           <button
             type="button"
             onClick={() => navigateTo(-1)}
@@ -201,7 +254,9 @@ export function NotesPage() {
           </button>
           {folderPath.map((seg, i) => (
             <span key={seg.id} className="flex shrink-0 items-center gap-0.5">
-              <span className="text-muted/50 select-none">/</span>
+              <span className="text-muted/60 select-none px-0.5" aria-hidden>
+                ›
+              </span>
               <button
                 type="button"
                 onClick={() => navigateTo(i)}
@@ -237,6 +292,12 @@ export function NotesPage() {
         >
           +
         </button>
+        </div>
+        {folderPath.length > 0 && (
+          <p className="truncate pl-0.5 text-[0.7rem] text-muted" title={["Notes", ...folderPath.map((s) => s.nom)].join(" › ")}>
+            Arborescence : {["Notes", ...folderPath.map((s) => s.nom)].join(" › ")}
+          </p>
+        )}
       </div>
 
       {/* ── Résultats de recherche ── */}
@@ -276,6 +337,7 @@ export function NotesPage() {
                 notes={notesIn}
                 subfolders={subsIn}
                 onOpen={() => navigateInto(f)}
+                onEdit={() => setEditFolderTarget(f)}
                 onDelete={async () => {
                   if (!confirm(`Supprimer « ${f.nom} » ? (les notes restent accessibles depuis la racine)`)) return;
                   await db.noteFolders.delete(f.id);
@@ -317,6 +379,12 @@ export function NotesPage() {
         open={folderModalOpen}
         onClose={() => setFolderModalOpen(false)}
         parentId={currentFolderId ?? undefined}
+      />
+      <EditFolderModal
+        folder={editFolderTarget}
+        allFolders={allFolders}
+        open={Boolean(editFolderTarget)}
+        onClose={() => setEditFolderTarget(null)}
       />
     </div>
   );
@@ -422,12 +490,14 @@ function FolderCard({
   notes,
   subfolders,
   onOpen,
+  onEdit,
   onDelete,
 }: {
   folder: NoteFolder;
   notes: RichNote[];
   subfolders: NoteFolder[];
   onOpen: () => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -468,12 +538,15 @@ function FolderCard({
         </p>
       </div>
 
-      {/* Bouton options (visible au survol) */}
+      {/* Options : toujours visibles sur mobile (pas de survol tactile) */}
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); setMenuOpen((x) => !x); }}
-        className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full bg-elevated/90 text-xs text-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:text-[var(--text)]"
-        aria-label="Options"
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuOpen((x) => !x);
+        }}
+        className="absolute right-0 top-0 grid h-7 w-7 place-items-center rounded-full border border-border bg-elevated text-sm text-muted shadow-sm hover:text-[var(--text)] max-sm:opacity-100 sm:opacity-0 sm:shadow-none sm:group-hover:opacity-100"
+        aria-label="Options du dossier"
       >
         ···
       </button>
@@ -482,10 +555,23 @@ function FolderCard({
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-7 z-20 min-w-[130px] overflow-hidden rounded-xl elevated-surface shadow-xl">
+          <div className="absolute right-0 top-8 z-20 min-w-[150px] overflow-hidden rounded-xl elevated-surface shadow-xl">
             <button
               type="button"
-              onClick={() => { onDelete(); setMenuOpen(false); }}
+              onClick={() => {
+                onEdit();
+                setMenuOpen(false);
+              }}
+              className="flex w-full items-center px-3 py-2.5 text-sm hover:bg-[var(--surface)]"
+            >
+              Modifier
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onDelete();
+                setMenuOpen(false);
+              }}
               className="flex w-full items-center px-3 py-2.5 text-sm text-[var(--red)] hover:bg-[var(--surface)]"
             >
               Supprimer
@@ -577,9 +663,12 @@ function NoteCard({
           </p>
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((x) => !x); }}
-            className="grid h-5 w-5 place-items-center rounded-full text-base opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
-            aria-label="Options"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((x) => !x);
+            }}
+            className="grid h-6 w-6 place-items-center rounded-full border border-current/15 text-base opacity-100 group-hover:opacity-80 sm:opacity-0 sm:group-hover:opacity-70"
+            aria-label="Options de la note"
           >
             ⋯
           </button>
@@ -631,12 +720,15 @@ function NoteCard({
 function NoteEditor({
   note,
   folders,
+  onClose: _onClose,
   onDelete,
 }: {
   note: RichNote;
   folders: NoteFolder[];
+  onClose: () => void;
   onDelete: () => void;
 }) {
+  const foldersForSelect = useMemo(() => foldersOrderedForSelect(folders), [folders]);
   const [editingTitle, setEditingTitle]   = useState(note.titre);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTagInput, setShowTagInput]   = useState(false);
@@ -764,15 +856,16 @@ function NoteEditor({
           })}
         </span>
         <select
-          className="rounded-lg border border-current/20 bg-transparent px-2 py-0.5 text-xs"
+          className="max-w-[min(100%,14rem)] rounded-lg border border-current/20 bg-transparent px-2 py-0.5 text-xs"
           value={note.dossierId ?? ""}
           onChange={(e) => void moveToFolder(e.target.value || undefined)}
           onClick={(e) => e.stopPropagation()}
+          title="Dossier (arborescence)"
         >
           <option value="">📋 Racine</option>
-          {folders.map((f) => (
+          {foldersForSelect.map((f) => (
             <option key={f.id} value={f.id}>
-              {f.icone} {f.nom}
+              {folderOptionLabel(f, folders)}
             </option>
           ))}
         </select>
@@ -934,6 +1027,133 @@ function ToolBtn({
     >
       {label}
     </button>
+  );
+}
+
+/** Dossier `nodeId` est-il un descendant strict de `ancestorId` ? */
+function isDescendantOfFolder(ancestorId: string, nodeId: string, all: NoteFolder[]): boolean {
+  const map = new Map(all.map((f) => [f.id, f]));
+  let cur = map.get(nodeId);
+  while (cur?.parentId) {
+    if (cur.parentId === ancestorId) return true;
+    cur = map.get(cur.parentId);
+  }
+  return false;
+}
+
+/* ═══════════════════════════════════ Modal édition dossier ═══════════════ */
+function EditFolderModal({
+  folder,
+  allFolders,
+  open,
+  onClose,
+}: {
+  folder: NoteFolder | null;
+  allFolders: NoteFolder[];
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [nom, setNom] = useState("");
+  const [description, setDescription] = useState("");
+  const [couleur, setCouleur] = useState(FOLDER_TINTS[0]!.value);
+  const [parentId, setParentId] = useState<string>("");
+
+  useEffect(() => {
+    if (!folder) return;
+    setNom(folder.nom);
+    setDescription(folder.description ?? "");
+    setCouleur(folder.bgColor);
+    setParentId(folder.parentId ?? "");
+  }, [folder]);
+
+  const parentCandidates = useMemo(() => {
+    if (!folder) return [];
+    return foldersOrderedForSelect(allFolders).filter(
+      (f) => f.id !== folder.id && !isDescendantOfFolder(folder.id, f.id, allFolders)
+    );
+  }, [folder, allFolders]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!folder || !nom.trim()) return;
+    await db.noteFolders.update(folder.id, {
+      nom: nom.trim(),
+      description: description.trim() || undefined,
+      bgColor: couleur,
+      parentId: parentId || undefined,
+    });
+    toast.ok("Dossier mis à jour");
+    onClose();
+  }
+
+  if (!folder) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Modifier le dossier">
+      <form onSubmit={submit} className="space-y-4">
+        <div className="flex justify-center">
+          <div className="w-24">
+            <FolderIconSvg color={couleur} noteCount={0} subfolderCount={0} />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted">Nom</label>
+          <input
+            className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2.5 outline-none focus:border-accent"
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted">Description (optionnel)</label>
+          <input
+            className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-accent"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted">Emplacement (dossier parent)</label>
+          <select
+            className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2.5 text-sm"
+            value={parentId}
+            onChange={(e) => setParentId(e.target.value)}
+          >
+            <option value="">Racine (Notes)</option>
+            {parentCandidates.map((f) => (
+              <option key={f.id} value={f.id}>
+                {folderOptionLabel(f, allFolders)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted">Couleur</label>
+          <div className="flex flex-wrap gap-2.5">
+            {FOLDER_TINTS.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                title={t.label}
+                onClick={() => setCouleur(t.value)}
+                className="h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 active:scale-90"
+                style={{
+                  background: t.value,
+                  borderColor: couleur === t.value ? "var(--text)" : "transparent",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={!nom.trim()}
+          className="w-full rounded-xl bg-accent py-3 font-semibold text-white transition-opacity active:scale-95 disabled:opacity-40"
+        >
+          Enregistrer
+        </button>
+      </form>
+    </Modal>
   );
 }
 

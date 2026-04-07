@@ -44,9 +44,8 @@ export function NavFabSheet({ open, onClose }: Props) {
   return (
     <Modal open={open} onClose={onClose} title="Plus" contentId="nav-fab-sheet">
       <p className="mb-4 text-sm text-muted">
-        Réglages et fond d’écran sont aussi en <strong className="text-[var(--text)]">bas à droite</strong> (icône
-        engrenage). Le bouton <strong className="text-[var(--text)]">🔍</strong> en haut à droite est la recherche — il
-        peut masquer les icônes sur petit écran : pense au menu + ou à la barre du bas.
+        <strong className="text-[var(--text)]">Réglages</strong> : barre du bas à droite (icône engrenage), ou les tuiles
+        ci-dessous.
       </p>
       <ul className="grid grid-cols-2 gap-3">
         {FAB_DESTINATIONS.map((item) => {

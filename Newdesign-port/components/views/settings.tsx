@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
+import { imageFileToDataUrl } from '@/lib/wallpaperImage'
 import { useStore } from '@/lib/store'
 import type { UserProfile as UserProfileType } from '@/lib/types'
 import { AnimatedCard } from '@/components/animated-card'
@@ -23,7 +24,6 @@ import {
   AlertTriangle,
   ImageIcon,
   Camera,
-  FolderOpen,
   X,
   Pencil,
   ChevronRight,
@@ -60,7 +60,6 @@ export function SettingsView() {
   } = useStore()
   
   const [showResetConfirm, setShowResetConfirm] = useState(false)
-  const [showWallpaperModal, setShowWallpaperModal] = useState(false)
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const wallpaperInputRef = useRef<HTMLInputElement>(null)
@@ -163,6 +162,30 @@ export function SettingsView() {
     }
   }
   
+  const applyWallpaperFile = async (file: File | undefined) => {
+    if (!file?.type.startsWith('image/')) {
+      toast.error('Choisis une image.')
+      return
+    }
+    try {
+      const dataUrl = await imageFileToDataUrl(file)
+      if (dataUrl.length > 2_500_000) {
+        toast.error('Image trop lourde pour le stockage local.')
+        return
+      }
+      updateSettings({ wallpaper: dataUrl })
+      toast.success('Fond d’écran enregistré')
+    } catch {
+      toast.error('Impossible de traiter l’image')
+    }
+  }
+
+  const handleWallpaperPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    await applyWallpaperFile(file)
+  }
+
   const handleReset = async () => {
     await resetData()
     setShowResetConfirm(false)
@@ -464,6 +487,64 @@ export function SettingsView() {
                   {size.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <label className="text-sm font-medium block">Fond d&apos;écran</label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Image derrière l’app (stockage local). Tu peux la retirer à tout moment.
+                </p>
+              </div>
+              {settings.wallpaper ? (
+                <div
+                  className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-cover bg-center"
+                  style={{ backgroundImage: `url("${settings.wallpaper}")` }}
+                  role="img"
+                  aria-label="Aperçu du fond d’écran"
+                />
+              ) : null}
+            </div>
+            <input
+              ref={wallpaperInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleWallpaperPick}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleWallpaperPick}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => wallpaperInputRef.current?.click()}>
+                <ImageIcon className="mr-1.5 h-4 w-4" />
+                Galerie
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => cameraInputRef.current?.click()}>
+                <Camera className="mr-1.5 h-4 w-4" />
+                Appareil photo
+              </Button>
+              {settings.wallpaper ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    updateSettings({ wallpaper: undefined })
+                    toast.success('Fond d’écran retiré')
+                  }}
+                >
+                  <X className="mr-1.5 h-4 w-4" />
+                  Retirer
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>

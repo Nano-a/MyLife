@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { TabBar } from "./TabBar";
 import { Toaster } from "./Toaster";
 import { useSessionStore } from "../auth/sessionStore";
@@ -7,7 +7,6 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getPrefs } from "../db";
 import type { AppPreferences } from "@mylife/core";
 import { LockScreen } from "./LockScreen";
-import { GlobalSearchModal } from "./GlobalSearchModal";
 import { OnboardingModal } from "./OnboardingModal";
 import { tickAgendaReminders } from "../lib/notifications";
 import { useThemePrefs } from "../theme/ThemeProvider";
@@ -33,8 +32,6 @@ export function AppShell() {
   const prefs = prefsRow?.value as AppPreferences | undefined;
   const { prefs: themePrefs } = useThemePrefs();
   const isLightShell = themePrefs.theme === "light";
-  const [searchOpen, setSearchOpen] = useState(false);
-
   useEffect(() => {
     touch();
   }, [location.pathname, touch]);
@@ -113,22 +110,11 @@ export function AppShell() {
       >
         Aller au contenu
       </a>
-      {!wallpaperPending && (
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          className="fixed right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-white/5 text-lg shadow-lg backdrop-blur-xl hover:border-orange-400/40 hover:bg-white/10 active:scale-95 [html[data-theme=light]_&]:border-black/10 [html[data-theme=light]_&]:bg-white [html[data-theme=light]_&]:shadow-md"
-          aria-label="Recherche globale"
-        >
-          🔍
-        </button>
-      )}
-      <GlobalSearchModal open={searchOpen && !wallpaperPending} onClose={() => setSearchOpen(false)} />
       {showOnboarding && <OnboardingWithPrefs />}
       <HabitReminderLayer />
       <main
         id="main-content"
-        className="relative z-10 mx-auto w-full max-w-3xl flex-1 py-5 pl-4 pr-4 max-sm:pr-[4.75rem] sm:px-5"
+        className="relative z-10 mx-auto w-full max-w-3xl flex-1 px-4 py-5 sm:px-5"
         tabIndex={-1}
       >
         {/* key force remount → animation à chaque changement de route */}
