@@ -45,6 +45,13 @@
   --glow: oklch(0.55 0.2 250 / 0.3);
   --gradient-start: oklch(0.55 0.2 250);
   --gradient-end: oklch(0.7 0.15 180);
+
+  /* Alias MyLife (pages portées depuis apps/web) */
+  --text: var(--foreground);
+  --surface: var(--muted);
+  --elevated2: var(--secondary);
+  --red: var(--destructive);
+  --green: var(--chart-2);
 }
 
 /* Dark theme - default for this app - harmonized with bamboo green */
@@ -358,4 +365,15 @@
 
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Surfaces type « carte » pour agenda / notes portés */
+.elevated-surface {
+  border: 1px solid var(--border);
+  background: color-mix(in oklch, var(--card) 85%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.shadow-float {
+  box-shadow: 0 8px 30px oklch(0 0 0 / 0.12);
 }

@@ -5,6 +5,7 @@ import { FirebaseAuthSync } from "@/lib/mylife/auth/FirebaseAuthSync";
 import { useSessionStore } from "@/lib/mylife/auth/sessionStore";
 import { ThemeProvider } from "@/lib/mylife/theme/ThemeProvider";
 import { LifeFlowDataProvider } from "@/components/lifeflow-data-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -14,7 +15,10 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <FirebaseAuthSync />
-      <LifeFlowDataProvider>{children}</LifeFlowDataProvider>
+      <LifeFlowDataProvider>
+        {children}
+        <Toaster richColors position="top-center" />
+      </LifeFlowDataProvider>
     </ThemeProvider>
   );
 }

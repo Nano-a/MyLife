@@ -1,438 +1,608 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useStore } from '@/lib/store'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import type { FinanceTransaction, FinanceTxType } from '@mylife/core'
+import {
+  describeSubscriptionPeriod,
+  nextChargeDate,
+  subscriptionAmountForMonth,
+} from '@mylife/core'
 import { AnimatedCard } from '@/components/animated-card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { db } from '@/lib/mylife/db'
 import {
-  Wallet,
-  Plus,
-  TrendingUp,
-  TrendingDown,
-  PiggyBank,
-  X,
-  Trash2,
-  ArrowUpCircle,
-  ArrowDownCircle,
-} from 'lucide-react'
+  CAT_DEPENSE,
+  CAT_REVENU,
+  EMOJI_TYPE,
+  FinanceBalanceDialog,
+  FinanceBudgetDialog,
+  FinanceSubscriptionDialog,
+  FinanceTxDialog,
+} from '@/components/views/finance-modals'
+import { FileSpreadsheet, FileText, Plus, Wallet } from 'lucide-react'
+
+type Tab = 'transactions' | 'budgets' | 'abonnements'
+
+type BalanceDualPoint = { date: string; label: string; reel: number; parfait: number }
+
+function BalanceDualChart({ data }: { data: BalanceDualPoint[] }) {
+  const w = 320
+  const h = 140
+  const padL = 36
+  const padR = 8
+  const padT = 22
+  const padB = 24
+  const innerW = w - padL - padR
+  const innerH = h - padT - padB
+  const minY = Math.min(...data.map((d) => Math.min(d.reel, d.parfait)))
+  const maxY = Math.max(...data.map((d) => Math.max(d.reel, d.parfait)))
+  const span = maxY - minY || 1
+  const n = data.length
+  const xAt = (i: number) => padL + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
+  const yAt = (v: number) => padT + innerH - ((v - minY) / span) * innerH
+  const pathReel = data
+    .map((d, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(d.reel).toFixed(1)}`)
+    .join(' ')
+  const pathParfait = data
+    .map((d, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(d.parfait).toFixed(1)}`)
+    .join(' ')
+  const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((i, j, a) => a.indexOf(i) === j)
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="max-h-44 w-full text-muted-foreground" aria-hidden>
+      <text x={padL} y={14} className="fill-current text-[9px]">
+        {minY.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} –{' '}
+        {maxY.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
+      </text>
+      {tickIdx.map((i) => (
+        <text key={data[i]!.date} x={xAt(i)} y={h - 6} textAnchor="middle" className="fill-current text-[8px]">
+          {data[i]!.label}
+        </text>
+      ))}
+      <path
+        d={pathReel}
+        fill="none"
+        stroke="hsl(var(--chart-1))"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d={pathParfait}
+        fill="none"
+        stroke="hsl(var(--chart-2))"
+        strokeWidth={2}
+        strokeDasharray="5 4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function KpiMini({
+  label,
+  value,
+  className,
+}: {
+  label: string
+  value: string
+  className?: string
+}) {
+  return (
+    <AnimatedCard className="p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 truncate text-lg font-bold', className)}>{value}</p>
+    </AnimatedCard>
+  )
+}
+
+function EmptyFin({ icon, msg }: { icon: string; msg: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+      <p className="text-3xl">{icon}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{msg}</p>
+    </div>
+  )
+}
+
+function TxRowFin({ tx, onDelete }: { tx: FinanceTransaction; onDelete: () => void }) {
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-border bg-card/50 px-4 py-3 transition-colors hover:bg-muted/40">
+      <span className="shrink-0 text-xl">{EMOJI_TYPE[tx.type]}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="font-semibold">
+            {tx.type === 'depense' || tx.type === 'abonnement' ? '−' : '+'}
+            {tx.montant.toLocaleString('fr-FR')} €
+          </span>
+          {tx.superflue && (
+            <span className="rounded bg-amber-500/15 px-1.5 text-xs text-amber-600 dark:text-amber-400">
+              superflu
+            </span>
+          )}
+        </div>
+        <p className="truncate text-sm text-muted-foreground">
+          {tx.categorie}
+          {tx.commentaire ? ` · ${tx.commentaire}` : ''} · {tx.date}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {tx.type === 'depense' && (
+          <button
+            type="button"
+            title="Marquer / démarquer superflu"
+            onClick={() => void db.transactions.update(tx.id, { superflue: !tx.superflue })}
+            className={cn(
+              'rounded-lg px-2 py-1 text-xs transition-colors',
+              tx.superflue
+                ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                : 'bg-muted text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400'
+            )}
+          >
+            ⚡
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          className="rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive [li:hover_&]:opacity-100"
+        >
+          ✕
+        </button>
+      </div>
+    </li>
+  )
+}
 
 export function FinancesView() {
-  const {
-    transactions,
-    financeCategories,
-    addTransaction,
-    deleteTransaction,
-  } = useStore()
-  
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense')
-  const [newTransaction, setNewTransaction] = useState({
-    amount: '',
-    description: '',
-    categoryId: '',
-    isEssential: true,
-  })
-  
-  const today = new Date().toISOString().split('T')[0]
-  const currentMonth = today.substring(0, 7)
-  
-  // Calculate stats
-  const stats = useMemo(() => {
-    const monthTransactions = transactions.filter((t) => t.date.startsWith(currentMonth))
-    
-    const monthIncome = monthTransactions
-      .filter((t) => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0)
-    
-    const monthExpenses = monthTransactions
-      .filter((t) => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0)
-    
-    const essentialExpenses = monthTransactions
-      .filter((t) => t.type === 'expense' && t.isEssential)
-      .reduce((sum, t) => sum + t.amount, 0)
-    
-    const nonEssentialExpenses = monthExpenses - essentialExpenses
-    
-    const balance = monthIncome - monthExpenses
-    
-    // Expenses by category
-    const expensesByCategory = financeCategories
-      .filter((c) => c.type === 'expense')
-      .map((category) => {
-        const categoryTotal = monthTransactions
-          .filter((t) => t.categoryId === category.id && t.type === 'expense')
-          .reduce((sum, t) => sum + t.amount, 0)
-        
-        return {
-          ...category,
-          total: categoryTotal,
-          budgetProgress: category.budget ? (categoryTotal / category.budget) * 100 : 0,
-        }
-      })
-      .filter((c) => c.total > 0 || c.budget)
-      .sort((a, b) => b.total - a.total)
-    
-    return {
-      monthIncome,
-      monthExpenses,
-      essentialExpenses,
-      nonEssentialExpenses,
-      balance,
-      expensesByCategory,
+  const txs = useLiveQuery(() => db.transactions.orderBy('date').reverse().toArray(), []) ?? []
+  const snaps =
+    useLiveQuery(() => db.balanceSnapshots.orderBy('date').reverse().toArray(), []) ?? []
+  const buds = useLiveQuery(() => db.budgets.toArray(), []) ?? []
+  const subs = useLiveQuery(() => db.subscriptions.toArray(), []) ?? []
+
+  const [tab, setTab] = useState<Tab>('transactions')
+  const [addTxOpen, setAddTxOpen] = useState(false)
+  const [addSubOpen, setAddSubOpen] = useState(false)
+  const [addBudOpen, setAddBudOpen] = useState(false)
+  const [soldeOpen, setSoldeOpen] = useState(false)
+  const [filterCat, setFilterCat] = useState('')
+  const [filterType, setFilterType] = useState<FinanceTxType | ''>('')
+  const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6)
+  const montantRef = useRef<HTMLInputElement>(null)
+
+  const currentMonth = new Date().toISOString().slice(0, 7)
+
+  const soldeReel = snaps[0]?.solde ?? null
+  const txsThisMonth = txs.filter((t) => t.date.startsWith(currentMonth))
+  const depMois = txsThisMonth.reduce((s, t) => s + (t.type === 'depense' ? t.montant : 0), 0)
+  const revMois = txsThisMonth.reduce(
+    (s, t) => s + (t.type === 'revenu' || t.type === 'gain' ? t.montant : 0),
+    0
+  )
+  const superfluSum = useMemo(
+    () => txs.reduce((s, t) => s + (t.type === 'depense' && t.superflue ? t.montant : 0), 0),
+    [txs]
+  )
+  const soldeSansSuperflu = soldeReel != null ? soldeReel + superfluSum : null
+
+  const budgetUsage = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const t of txsThisMonth) {
+      if (t.type === 'depense') map.set(t.categorie, (map.get(t.categorie) ?? 0) + t.montant)
     }
-  }, [transactions, financeCategories, currentMonth])
-  
-  // Recent transactions
-  const recentTransactions = useMemo(() => {
-    return [...transactions]
-      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 15)
-  }, [transactions])
-  
-  const handleAddTransaction = () => {
-    if (!newTransaction.amount || !newTransaction.categoryId) return
-    
-    addTransaction({
-      type: transactionType,
-      amount: parseFloat(newTransaction.amount),
-      description: newTransaction.description,
-      categoryId: newTransaction.categoryId,
-      date: today,
-      isEssential: newTransaction.isEssential,
-      isRecurring: false,
-    })
-    
-    setNewTransaction({ amount: '', description: '', categoryId: '', isEssential: true })
-    setShowAddModal(false)
+    return map
+  }, [txsThisMonth])
+
+  const byMonth = useMemo(() => {
+    const m = new Map<string, { dep: number; rev: number }>()
+    for (const t of txs) {
+      const key = t.date.slice(0, 7)
+      const cur = m.get(key) ?? { dep: 0, rev: 0 }
+      if (t.type === 'depense') cur.dep += t.montant
+      if (t.type === 'revenu' || t.type === 'gain') cur.rev += t.montant
+      m.set(key, cur)
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-chartMonths)
+  }, [txs, chartMonths])
+
+  const balanceDualSeries = useMemo(() => {
+    const ord = [...snaps].sort((a, b) => a.date.localeCompare(b.date))
+    const superfluCumulJusque = (dateIso: string) =>
+      txs
+        .filter((t) => t.type === 'depense' && t.superflue && t.date <= dateIso)
+        .reduce((s, t) => s + t.montant, 0)
+    return ord.map((s) => ({
+      date: s.date,
+      label: s.date.slice(5),
+      reel: s.solde,
+      parfait: s.solde + superfluCumulJusque(s.date),
+    }))
+  }, [snaps, txs])
+
+  const abonMensuel = useMemo(() => {
+    const [ys, ms] = currentMonth.split('-').map(Number)
+    return subs.reduce((s, sub) => s + subscriptionAmountForMonth(sub, ys!, ms! - 1), 0)
+  }, [subs, currentMonth])
+  const abonAnnuel = useMemo(() => {
+    const y = Number(currentMonth.slice(0, 4))
+    let total = 0
+    for (const sub of subs) {
+      for (let m0 = 0; m0 < 12; m0++) total += subscriptionAmountForMonth(sub, y, m0)
+    }
+    return total
+  }, [subs, currentMonth])
+
+  const filtered = useMemo(() => {
+    let list = txs
+    if (filterCat) list = list.filter((t) => t.categorie === filterCat)
+    if (filterType) list = list.filter((t) => t.type === filterType)
+    return list
+  }, [txs, filterCat, filterType])
+
+  async function deleteTransaction(id: string) {
+    await db.transactions.delete(id)
+    toast.info('Transaction supprimée')
   }
-  
-  const getCategoryById = (id: string) => financeCategories.find((c) => c.id === id)
-  
-  const availableCategories = financeCategories.filter((c) => c.type === transactionType)
-  
+
+  async function deleteBudget(id: string) {
+    if (!confirm('Supprimer ce budget ?')) return
+    await db.budgets.delete(id)
+    toast.info('Budget supprimé')
+  }
+
+  async function deleteSubscription(id: string) {
+    if (!confirm('Supprimer cet abonnement récurrent ?')) return
+    await db.subscriptions.delete(id)
+    toast.info('Abonnement supprimé')
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10)
+
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 animate-fade-up">
+    <div className="mx-auto max-w-7xl p-4 md:p-8">
+      <header className="mb-6 flex animate-fade-up flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Finances</h1>
-          <p className="text-muted-foreground">Gérez votre budget et vos dépenses</p>
+          <h1 className="text-2xl font-bold md:text-3xl">Finances</h1>
+          <p className="text-muted-foreground">Transactions, budgets et abonnements (données locales)</p>
         </div>
-        <Button onClick={() => setShowAddModal(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Transaction</span>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => setSoldeOpen(true)}>
+            <Wallet className="h-4 w-4" />
+            Solde
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 rounded-xl"
+            onClick={async () => {
+              const { downloadFinanceReportPdf } = await import('@/lib/mylife/lib/exportReports')
+              downloadFinanceReportPdf(txs, snaps, `mylife-finances-${stamp}.pdf`)
+              toast.success('Rapport PDF téléchargé')
+            }}
+          >
+            <FileText className="h-4 w-4" />
+            PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 rounded-xl"
+            onClick={async () => {
+              const { downloadFinanceReportXlsx } = await import('@/lib/mylife/lib/exportReports')
+              downloadFinanceReportXlsx(txs, `mylife-finances-${stamp}.xlsx`)
+              toast.success('Excel téléchargé')
+            }}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Excel
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1.5 rounded-xl"
+            onClick={() => {
+              setAddTxOpen(true)
+              setTimeout(() => montantRef.current?.focus(), 80)
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Transaction
+          </Button>
+        </div>
+      </header>
+
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiMini
+          label="Solde relevé"
+          value={soldeReel != null ? `${soldeReel.toLocaleString('fr-FR')} €` : '—'}
+        />
+        <KpiMini
+          label="Sans superflus"
+          value={soldeSansSuperflu != null ? `${soldeSansSuperflu.toLocaleString('fr-FR')} €` : '—'}
+          className="text-chart-2"
+        />
+        <KpiMini label="Dépenses / mois" value={`${depMois.toLocaleString('fr-FR')} €`} className="text-destructive" />
+        <KpiMini label="Revenus / mois" value={`${revMois.toLocaleString('fr-FR')} €`} className="text-chart-2" />
       </div>
-      
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <AnimatedCard delay={100}>
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-5 h-5 text-chart-2" />
-            <span className="text-sm text-muted-foreground">Revenus</span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-chart-2">
-            +{stats.monthIncome.toLocaleString('fr-FR')} €
+
+      {balanceDualSeries.length >= 2 && (
+        <AnimatedCard className="mb-6 p-4" delay={80}>
+          <p className="mb-2 text-sm font-semibold">Solde relevé vs sans superflus</p>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Courbe pleine : solde saisi · courbe pointillée : solde + dépenses superflues cumulées jusqu’à cette date
           </p>
+          <BalanceDualChart data={balanceDualSeries} />
         </AnimatedCard>
-        
-        <AnimatedCard delay={200}>
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingDown className="w-5 h-5 text-chart-5" />
-            <span className="text-sm text-muted-foreground">Dépenses</span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-chart-5">
-            -{stats.monthExpenses.toLocaleString('fr-FR')} €
-          </p>
-        </AnimatedCard>
-        
-        <AnimatedCard delay={300}>
-          <div className="flex items-center gap-2 mb-2">
-            <Wallet className="w-5 h-5 text-primary" />
-            <span className="text-sm text-muted-foreground">Solde</span>
-          </div>
-          <p className={cn(
-            'text-xl md:text-2xl font-bold',
-            stats.balance >= 0 ? 'text-chart-2' : 'text-chart-5'
-          )}>
-            {stats.balance >= 0 ? '+' : ''}{stats.balance.toLocaleString('fr-FR')} €
-          </p>
-        </AnimatedCard>
-        
-        <AnimatedCard delay={400}>
-          <div className="flex items-center gap-2 mb-2">
-            <PiggyBank className="w-5 h-5 text-chart-4" />
-            <span className="text-sm text-muted-foreground">Superflus</span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold">
-            {stats.nonEssentialExpenses.toLocaleString('fr-FR')} €
-          </p>
-        </AnimatedCard>
-      </div>
-      
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Budget by Category */}
-        <AnimatedCard delay={500}>
-          <h3 className="font-semibold mb-4">Budget par catégorie</h3>
-          
-          {stats.expensesByCategory.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">
-              Aucune dépense ce mois-ci
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {stats.expensesByCategory.map((category) => (
-                <div key={category.id}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: category.color }}
-                      />
-                      <span className="text-sm font-medium">{category.name}</span>
-                    </div>
-                    <div className="text-sm">
-                      <span className={cn(
-                        'font-medium',
-                        category.budget && category.budgetProgress > 100 && 'text-chart-5'
-                      )}>
-                        {category.total.toLocaleString('fr-FR')} €
-                      </span>
-                      {category.budget && (
-                        <span className="text-muted-foreground">
-                          {' '}/ {category.budget} €
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {category.budget && (
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          'h-full rounded-full transition-all duration-500',
-                          category.budgetProgress > 100 ? 'bg-chart-5' : 'bg-primary'
-                        )}
-                        style={{ 
-                          width: `${Math.min(100, category.budgetProgress)}%`,
-                          backgroundColor: category.budgetProgress <= 100 ? category.color : undefined,
-                        }}
-                      />
-                    </div>
+      )}
+
+      {byMonth.length > 0 && (
+        <AnimatedCard className="mb-6 p-4" delay={100}>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Historique mensuel</p>
+            <div className="flex gap-1 rounded-lg border border-border p-0.5 text-xs">
+              {([3, 6, 12] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setChartMonths(n)}
+                  className={cn(
+                    'rounded-md px-2 py-1 font-medium transition-colors',
+                    chartMonths === n
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
-                </div>
+                >
+                  {n} m
+                </button>
               ))}
             </div>
-          )}
-        </AnimatedCard>
-        
-        {/* Recent Transactions */}
-        <AnimatedCard delay={600}>
-          <h3 className="font-semibold mb-4">Transactions récentes</h3>
-          
-          {recentTransactions.length === 0 ? (
-            <div className="text-center py-8">
-              <Wallet className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-              <p className="text-muted-foreground">Aucune transaction</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {recentTransactions.map((transaction) => {
-                const category = getCategoryById(transaction.categoryId)
-                const isIncome = transaction.type === 'income'
-                
-                return (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors group"
-                  >
+          </div>
+          <div className="flex h-28 items-end gap-1">
+            {byMonth.map(([mois, v]) => {
+              const maxV = Math.max(...byMonth.map(([, x]) => Math.max(x.dep, x.rev)), 1)
+              return (
+                <div key={mois} className="flex flex-1 flex-col items-center gap-1">
+                  <div className="flex h-24 w-full items-end justify-center gap-0.5">
                     <div
-                      className={cn(
-                        'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                        isIncome ? 'bg-chart-2/10' : 'bg-chart-5/10'
-                      )}
-                    >
-                      {isIncome ? (
-                        <ArrowUpCircle className="w-5 h-5 text-chart-2" />
-                      ) : (
-                        <ArrowDownCircle className="w-5 h-5 text-chart-5" />
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {transaction.description || category?.name}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{category?.name}</span>
-                        <span>•</span>
-                        <span>
-                          {new Date(transaction.date).toLocaleDateString('fr-FR', {
-                            day: 'numeric',
-                            month: 'short',
-                          })}
-                        </span>
-                        {!transaction.isEssential && transaction.type === 'expense' && (
-                          <>
-                            <span>•</span>
-                            <span className="text-chart-4">Superflu</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <p className={cn(
-                      'font-semibold',
-                      isIncome ? 'text-chart-2' : 'text-chart-5'
-                    )}>
-                      {isIncome ? '+' : '-'}{transaction.amount.toLocaleString('fr-FR')} €
-                    </p>
-                    
-                    <button
-                      onClick={() => deleteTransaction(transaction.id)}
-                      className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      className="w-3 rounded-t-sm bg-chart-5/70 transition-all"
+                      style={{ height: `${(v.dep / maxV) * 100}%` }}
+                      title={`Dépenses ${v.dep} €`}
+                    />
+                    <div
+                      className="w-3 rounded-t-sm bg-chart-2/70 transition-all"
+                      style={{ height: `${(v.rev / maxV) * 100}%` }}
+                      title={`Revenus ${v.rev} €`}
+                    />
                   </div>
-                )
-              })}
-            </div>
-          )}
+                  <span className="text-[0.6rem] text-muted-foreground">{mois.slice(5)}</span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm bg-chart-5/70" />
+              Dépenses
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm bg-chart-2/70" />
+              Revenus
+            </span>
+          </div>
         </AnimatedCard>
+      )}
+
+      <div className="mb-6 flex gap-1 rounded-xl border border-border bg-muted/30 p-1">
+        {(
+          [
+            ['transactions', 'Transactions'],
+            ['budgets', 'Budgets'],
+            ['abonnements', 'Abonnements'],
+          ] as [Tab, string][]
+        ).map(([t, l]) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cn(
+              'flex-1 rounded-lg py-2 text-sm font-medium transition-colors',
+              tab === t
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {l}
+          </button>
+        ))}
       </div>
-      
-      {/* Add Transaction Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setShowAddModal(false)}
-          />
-          <AnimatedCard className="relative w-full max-w-md z-10">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Nouvelle transaction</h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="p-2 rounded-lg hover:bg-muted"
+
+      {tab === 'transactions' && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as FinanceTxType | '')}
+            >
+              <option value="">Tous types</option>
+              {(['depense', 'revenu', 'gain', 'epargne'] as FinanceTxType[]).map((ty) => (
+                <option key={ty} value={ty}>
+                  {EMOJI_TYPE[ty]} {ty}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              value={filterCat}
+              onChange={(e) => setFilterCat(e.target.value)}
+            >
+              <option value="">Toutes catégories</option>
+              {[...CAT_DEPENSE, ...CAT_REVENU].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            {(filterCat || filterType) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-xl"
+                onClick={() => {
+                  setFilterCat('')
+                  setFilterType('')
+                }}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Type selector */}
-              <div className="flex gap-2">
-                <Button
-                  variant={transactionType === 'expense' ? 'default' : 'outline'}
-                  onClick={() => {
-                    setTransactionType('expense')
-                    setNewTransaction((prev) => ({ ...prev, categoryId: '' }))
-                  }}
-                  className="flex-1"
-                >
-                  <ArrowDownCircle className="w-4 h-4 mr-2" />
-                  Dépense
-                </Button>
-                <Button
-                  variant={transactionType === 'income' ? 'default' : 'outline'}
-                  onClick={() => {
-                    setTransactionType('income')
-                    setNewTransaction((prev) => ({ ...prev, categoryId: '' }))
-                  }}
-                  className="flex-1"
-                >
-                  <ArrowUpCircle className="w-4 h-4 mr-2" />
-                  Revenu
-                </Button>
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-1 block">Montant (€)</label>
-                <Input
-                  type="number"
-                  value={newTransaction.amount}
-                  onChange={(e) => setNewTransaction((prev) => ({ ...prev, amount: e.target.value }))}
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-1 block">Description (optionnel)</label>
-                <Input
-                  value={newTransaction.description}
-                  onChange={(e) => setNewTransaction((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Ex: Courses au supermarché"
-                />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-2 block">Catégorie</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {availableCategories.map((category) => (
-                    <button
-                      key={category.id}
-                      onClick={() => setNewTransaction((prev) => ({ ...prev, categoryId: category.id }))}
-                      className={cn(
-                        'p-3 rounded-xl text-sm transition-all',
-                        newTransaction.categoryId === category.id
-                          ? 'ring-2 ring-primary'
-                          : 'bg-muted hover:bg-muted-foreground/20'
-                      )}
-                      style={{
-                        backgroundColor: newTransaction.categoryId === category.id ? `${category.color}20` : undefined,
-                      }}
-                    >
-                      <div
-                        className="w-6 h-6 rounded-full mx-auto mb-1"
-                        style={{ backgroundColor: category.color }}
-                      />
-                      <span className="truncate block">{category.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {transactionType === 'expense' && (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setNewTransaction((prev) => ({ ...prev, isEssential: !prev.isEssential }))}
-                    className={cn(
-                      'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
-                      newTransaction.isEssential
-                        ? 'bg-primary border-primary'
-                        : 'border-muted-foreground'
-                    )}
-                  >
-                    {newTransaction.isEssential && (
-                      <svg className="w-3 h-3 text-primary-foreground" viewBox="0 0 12 12">
-                        <path
-                          fill="currentColor"
-                          d="M10.28 2.28L3.989 8.575 1.695 6.28A1 1 0 00.28 7.695l3 3a1 1 0 001.414 0l7-7A1 1 0 0010.28 2.28z"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                  <span className="text-sm">Dépense essentielle</span>
-                </div>
-              )}
-              
-              <div className="flex gap-3 pt-2">
-                <Button variant="outline" onClick={() => setShowAddModal(false)} className="flex-1">
-                  Annuler
-                </Button>
-                <Button onClick={handleAddTransaction} className="flex-1" disabled={!newTransaction.amount || !newTransaction.categoryId}>
-                  Ajouter
-                </Button>
-              </div>
-            </div>
-          </AnimatedCard>
+                Réinitialiser
+              </Button>
+            )}
+          </div>
+
+          {filtered.length === 0 ? (
+            <EmptyFin icon="💸" msg="Aucune transaction" />
+          ) : (
+            <ul className="space-y-2">
+              {filtered.map((t) => (
+                <TxRowFin key={t.id} tx={t} onDelete={() => void deleteTransaction(t.id)} />
+              ))}
+            </ul>
+          )}
         </div>
       )}
+
+      {tab === 'budgets' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button size="sm" className="rounded-xl" onClick={() => setAddBudOpen(true)}>
+              + Nouveau budget
+            </Button>
+          </div>
+          {buds.length === 0 ? (
+            <EmptyFin
+              icon="🎯"
+              msg="Définis des budgets par catégorie pour suivre tes dépenses du mois"
+            />
+          ) : (
+            <ul className="space-y-3">
+              {buds.map((b) => {
+                const spent = budgetUsage.get(b.categorie) ?? 0
+                const pct = b.plafondMensuel > 0 ? Math.min(100, Math.round((spent / b.plafondMensuel) * 100)) : 0
+                const over = spent > b.plafondMensuel
+                return (
+                  <li key={b.id}>
+                    <AnimatedCard className="p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full" style={{ background: b.couleur }} />
+                          <span className="font-medium capitalize">{b.categorie}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={cn('text-sm font-semibold', over && 'text-destructive')}>
+                            {spent.toLocaleString('fr-FR')} / {b.plafondMensuel.toLocaleString('fr-FR')} €
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void deleteBudget(b.id)}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${pct}%`,
+                            background: over ? 'hsl(var(--destructive))' : b.couleur,
+                          }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {over
+                          ? `Dépassé de ${(spent - b.plafondMensuel).toLocaleString('fr-FR')} €`
+                          : `Reste ${(b.plafondMensuel - spent).toLocaleString('fr-FR')} € (${pct}% utilisé)`}
+                      </p>
+                    </AnimatedCard>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {tab === 'abonnements' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button size="sm" className="rounded-xl" onClick={() => setAddSubOpen(true)}>
+              + Abonnement récurrent
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Configure une seule fois (montant, jour, mois concernés, fin ou pour toujours). Les prochains prélèvements
+            sont calculés automatiquement.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <KpiMini
+              label="Engagé ce mois-ci"
+              value={`${Math.round(abonMensuel).toLocaleString('fr-FR')} €`}
+            />
+            <KpiMini label="Sur l’année" value={`${Math.round(abonAnnuel).toLocaleString('fr-FR')} €`} />
+          </div>
+          {subs.length === 0 ? (
+            <EmptyFin
+              icon="🔄"
+              msg="Aucun abonnement — ajoute par ex. ton forfait (chaque mois) ou un abonnement annuel avec mois actifs"
+            />
+          ) : (
+            <ul className="space-y-2">
+              {subs.map((sub) => {
+                const next = nextChargeDate(sub)
+                return (
+                  <li key={sub.id}>
+                    <AnimatedCard className="flex items-center gap-3 px-4 py-3">
+                      <span className="text-xl">🔄</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{sub.libelle}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {sub.montant.toLocaleString('fr-FR')} € · {describeSubscriptionPeriod(sub)}
+                          {next && ` · Prochain : ${next}`}
+                          {!next && ' · (terminé ou hors période)'}
+                        </p>
+                        {sub.commentaire && (
+                          <p className="truncate text-xs text-muted-foreground">{sub.commentaire}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void deleteSubscription(sub.id)}
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                      >
+                        ✕
+                      </button>
+                    </AnimatedCard>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <FinanceTxDialog open={addTxOpen} onClose={() => setAddTxOpen(false)} montantRef={montantRef} />
+      <FinanceSubscriptionDialog open={addSubOpen} onClose={() => setAddSubOpen(false)} />
+      <FinanceBudgetDialog open={addBudOpen} onClose={() => setAddBudOpen(false)} />
+      <FinanceBalanceDialog
+        open={soldeOpen}
+        current={soldeReel ?? 0}
+        onClose={() => setSoldeOpen(false)}
+      />
     </div>
   )
 }

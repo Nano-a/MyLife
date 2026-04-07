@@ -13,6 +13,7 @@ import { FinancesView } from './views/finances'
 import { GoalsView } from './views/goals'
 import { NotesView } from './views/notes'
 import { SettingsView } from './views/settings'
+import { GlobalSearchControl } from './global-search'
 
 export function AppShell() {
   const [mounted, setMounted] = useState(false)
@@ -87,6 +88,8 @@ export function AppShell() {
         <div className="absolute bottom-[30%] left-[5%] w-[30%] h-[30%] rounded-full bg-[oklch(0.35_0.12_150/0.08)] blur-[60px] animate-pulse" style={{ animationDuration: '12s', animationDelay: '3s' }} />
       </div>
       
+      <GlobalSearchControl />
+
       {/* Desktop Sidebar */}
       <Sidebar />
       

@@ -107,6 +107,7 @@ type LifeFlowDataContextValue = {
   hydrationGoal: HydrationGoal;
   addHydration: (amount: number) => void;
   setHydrationGoal: (goal: number) => void;
+  updateHydrationGoalSettings: (patch: Partial<HydrationGoal>) => void;
 
   moodEntries: MoodEntry[];
   addMoodEntry: (entry: Omit<MoodEntry, "id" | "createdAt">) => void;
@@ -430,6 +431,15 @@ export function LifeFlowDataProvider({ children }: { children: ReactNode }) {
     });
   }, [uiBlob.hydrationGoal]);
 
+  const updateHydrationGoalSettings = useCallback(
+    async (patch: Partial<HydrationGoal>) => {
+      await patchUiBlob({
+        hydrationGoal: { ...uiBlob.hydrationGoal, ...patch },
+      });
+    },
+    [uiBlob.hydrationGoal]
+  );
+
   const addMoodEntry = useCallback(
     async (entry: Omit<MoodEntry, "id" | "createdAt">) => {
       await db.moodDays.put({
@@ -611,6 +621,7 @@ export function LifeFlowDataProvider({ children }: { children: ReactNode }) {
     hydrationGoal,
     addHydration,
     setHydrationGoal,
+    updateHydrationGoalSettings,
 
     moodEntries,
     addMoodEntry,
