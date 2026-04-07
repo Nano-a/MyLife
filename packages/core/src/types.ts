@@ -257,6 +257,8 @@ export interface Objective {
   noteEchec?: string;
   completedAt?: number;
   createdAt: number;
+  /** Ordre dans l’onglet (statut) : plus petit = plus haut. Optionnel, sinon tri par date de création. */
+  orderRank?: number;
 }
 
 /* ══════════ NOTES ══════════ */
