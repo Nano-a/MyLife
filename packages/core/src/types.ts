@@ -197,6 +197,11 @@ export interface FinanceSubscription {
   montant: number;
   categorie: string;
   commentaire?: string;
+  /**
+   * `debit` (défaut) = argent qui sort chaque mois / an (forfait, loyer).
+   * `credit` = argent qui entre de façon récurrente (salaire, pension, aide).
+   */
+  flow?: "debit" | "credit";
   /** Jour du mois (1–31) pour mensuel / annuel */
   jourPrelevement: number;
   period: SubscriptionBillingPeriod;

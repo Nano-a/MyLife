@@ -55,29 +55,32 @@ export const BUDGET_COLORS = [
 
 /** Texte affiché dans la liste : pas de « prochaine date », focus sur la règle automatique. */
 export function subscriptionFriendlyCaption(sub: FinanceSubscription): string {
+  const inflow = sub.flow === 'credit'
   const j = sub.jourPrelevement
+  const prefix = inflow ? 'Revenu récurrent : ' : ''
   if (sub.period === 'daily') {
     if (sub.moisActifs?.length) {
-      return `Chaque jour, sur les mois que tu as choisis — tout est calculé à partir de cette fiche, sans ressaisie.`
+      return `${prefix}Chaque jour, sur les mois que tu as choisis — tout est calculé à partir de cette fiche, sans ressaisie.`
     }
-    return `Chaque jour — une seule configuration, le total du mois est dérivé automatiquement.`
+    return `${prefix}Chaque jour — une seule configuration, le total du mois est dérivé automatiquement.`
   }
   if (sub.period === 'yearly') {
     const d = new Date(sub.dateDebut + 'T12:00:00')
     const monthName = MOIS_COURTS[d.getMonth()]
-    return `Une fois par an en ${monthName}, le ${j}. Reconduit tout seul chaque année${sub.sansFin ? '' : ` jusqu’au ${sub.finLe}`}.`
+    return `${prefix}Une fois par an en ${monthName}, le ${j}. Reconduit tout seul chaque année${sub.sansFin ? '' : ` jusqu’au ${sub.finLe}`}.`
   }
   if (!sub.moisActifs?.length) {
-    return `Chaque mois, le ${j} — comme un forfait : tu ne le retapes pas.`
+    return `${prefix}Chaque mois, le ${j}${inflow ? ' — montant reçu automatiquement dans le calendrier.' : ' — comme un forfait : tu ne le retapes pas.'}`
   }
   const labels = [...sub.moisActifs].sort((a, b) => a - b).map((m) => MOIS_COURTS[m])
-  return `Chaque année, les mêmes mois : ${labels.join(', ')}, le ${j}. Ex. transport scolaire (sept.–juin) : une saisie suffit, ça revient chaque année.`
+  return `${prefix}Chaque année, les mêmes mois : ${labels.join(', ')}, le ${j}. Ex. transport scolaire (sept.–juin) : une saisie suffit, ça revient chaque année.`
 }
 
 export type SubscriptionPrefill = {
   libelle?: string
   montant?: string
   categorie?: string
+  flow?: 'debit' | 'credit'
 }
 
 function SectionTitle({ n, children }: { n: number; children: ReactNode }) {
@@ -139,7 +142,7 @@ export function FinanceTxDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nouvelle transaction</DialogTitle>
+          <DialogTitle>Mouvement ponctuel (aujourd’hui)</DialogTitle>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -171,10 +174,34 @@ export function FinanceTxDialog({
               </button>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Pour un achat ponctuel aujourd’hui, enregistre ici. Pour quelque chose qui revient tout seul (forfait,
-            loyer…), utilise le bouton ci-dessous : tu ne le resaisiras plus.
-          </p>
+          <div className="rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+            {type === 'depense' && (
+              <>
+                <strong className="text-foreground">Dépense</strong> : ce que tu as payé une fois aujourd’hui
+                (courses, restaurant…). Pour un prélèvement <em>identique chaque mois</em>, va plutôt dans Finances →
+                Abonnements → « Prélèvement ou revenu fixe ».
+              </>
+            )}
+            {type === 'revenu' && (
+              <>
+                <strong className="text-foreground">Revenu</strong> : entrée d’argent ponctuelle que tu veux noter
+                aujourd’hui (prime, remboursement…). Pour un salaire ou une aide <em>du même montant chaque mois</em>, utilise
+                « Revenu chaque mois » dans l’onglet Abonnements.
+              </>
+            )}
+            {type === 'gain' && (
+              <>
+                <strong className="text-foreground">Gain</strong> : même idée que revenu (autre libellé pour tes stats).
+                Utile si tu sépares salaire régulier vs gains exceptionnels.
+              </>
+            )}
+            {type === 'epargne' && (
+              <>
+                <strong className="text-foreground">Épargne</strong> : transfert vers l’épargne — comptabilisé à part pour
+                voir ce qui sort du « compte courant » sans mélanger avec les dépenses courantes.
+              </>
+            )}
+          </div>
           <Input
             ref={montantRef}
             type="number"
@@ -285,6 +312,7 @@ export function FinanceSubscriptionDialog({
   const [sansFin, setSansFin] = useState(true)
   const [finLe, setFinLe] = useState('')
   const [dateDebut, setDateDebut] = useState(today)
+  const [flow, setFlow] = useState<'debit' | 'credit'>('debit')
   const prefillAppliedRef = useRef(false)
 
   useEffect(() => {
@@ -292,11 +320,18 @@ export function FinanceSubscriptionDialog({
       prefillAppliedRef.current = false
       return
     }
+    if (!prefill) setFlow('debit')
     if (!prefill || prefillAppliedRef.current) return
     prefillAppliedRef.current = true
     if (prefill.libelle != null) setLibelle(prefill.libelle)
     if (prefill.montant != null) setMontant(prefill.montant)
     if (prefill.categorie != null) setCategorie(prefill.categorie)
+    if (prefill.flow != null) {
+      setFlow(prefill.flow)
+      if (prefill.flow === 'credit' && prefill.categorie == null) {
+        setCategorie((c) => ((CAT_DEPENSE as readonly string[]).includes(c) ? 'salaire' : c))
+      }
+    }
   }, [open, prefill])
 
   function toggleMois(m: number) {
@@ -334,6 +369,7 @@ export function FinanceSubscriptionDialog({
       montant: m,
       categorie,
       commentaire: commentaire.trim() || undefined,
+      ...(flow === 'credit' ? { flow: 'credit' as const } : {}),
       jourPrelevement: period === 'daily' ? 1 : Math.min(31, Math.max(1, jour)),
       period,
       moisActifs,
@@ -351,20 +387,54 @@ export function FinanceSubscriptionDialog({
     setSansFin(true)
     setFinLe('')
     setDateDebut(new Date().toISOString().slice(0, 10))
+    setFlow('debit')
     onClose()
   }
+
+  const catChoices = flow === 'credit' ? [...CAT_REVENU] : [...CAT_DEPENSE]
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Prélèvement automatique</DialogTitle>
+          <DialogTitle>Argent récurrent (une seule saisie)</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Tu remplis cette fiche <strong>une seule fois</strong>. L’application réapplique la même règle chaque mois ou
-          chaque année (forfait SFR tous les mois, SNCF septembre–juin chaque année, etc.) — pas besoin de recréer la
-          dépense à la main.
+          Même principe pour les <strong>sorties</strong> (forfait, loyer) et les <strong>entrées</strong> (salaire,
+          pension) : tu décris la règle une fois, l’app la répète chaque mois ou chaque année et l’affiche dans le
+          calendrier.
         </p>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => {
+              setFlow('debit')
+              setCategorie((c) => ((CAT_REVENU as readonly string[]).includes(c) ? 'abonnement' : c))
+            }}
+            className={cn(
+              'flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors',
+              flow === 'debit' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'
+            )}
+          >
+            <span className="font-semibold text-foreground">Sort chaque mois / an</span>
+            <span className="mt-0.5 block text-xs opacity-90">Forfait, loyer, prélèvement…</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFlow('credit')
+              setCategorie((c) => ((CAT_DEPENSE as readonly string[]).includes(c) ? 'salaire' : c))
+            }}
+            className={cn(
+              'flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors',
+              flow === 'credit' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'
+            )}
+          >
+            <span className="font-semibold text-foreground">Entre chaque mois / an</span>
+            <span className="mt-0.5 block text-xs opacity-90">Salaire, aide, pension…</span>
+          </button>
+        </div>
 
         <form onSubmit={submit} className="space-y-4">
           <SectionTitle n={1}>Qu’est-ce que c’est ?</SectionTitle>
@@ -376,13 +446,13 @@ export function FinanceSubscriptionDialog({
           <Input
             type="number"
             inputMode="decimal"
-            placeholder="Montant prélevé à chaque fois (€)"
+            placeholder={flow === 'credit' ? 'Montant reçu à chaque fois (€)' : 'Montant prélevé à chaque fois (€)'}
             value={montant}
             onChange={(e) => setMontant(e.target.value)}
             className="text-lg font-semibold"
           />
           <div className="flex flex-wrap gap-2">
-            {CAT_DEPENSE.map((c) => (
+            {catChoices.map((c) => (
               <button
                 key={c}
                 type="button"
@@ -420,7 +490,7 @@ export function FinanceSubscriptionDialog({
             {period === 'monthly' &&
               'Ex. 49 € prélevés le 5 de chaque mois : tu ne retapes rien les mois suivants.'}
             {period === 'yearly' &&
-              'Le mois du prélèvement est celui de l’« échéance de référence » à l’étape 4 (modifie cette date pour changer le mois).'}
+              'En mode annuel, le mois du versement / prélèvement est le mois de la date « À partir de quelle date » (étape 4) — change cette date pour passer par ex. de juin à septembre.'}
             {period === 'daily' && 'Utile seulement si un montant est prélevé chaque jour.'}
           </p>
 
@@ -522,11 +592,28 @@ export function FinanceSubscriptionDialog({
           )}
 
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Échéance de référence (première prise en compte)</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              {period === 'yearly'
+                ? 'À partir de quelle date (fixe aussi le mois annuel)'
+                : 'À partir de quelle date on compte cette fiche'}
+            </label>
             <Input type="date" className="mt-1" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sert de point de départ dans le calendrier ; en mode annuel, le <strong>mois</strong> de cette date fixe le
-              mois du prélèvement annuel.
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {period === 'yearly' ? (
+                <>
+                  <strong className="text-foreground">Mode annuel</strong> : ce n’est pas une « échéance mystérieuse » —
+                  c’est simplement <strong>le mois choisi ici</strong> qui dit « chaque année en septembre » (ou autre),
+                  plus le jour saisi à l’étape 3. La date complète sert aussi à savoir à partir de quand l’app inclut cette
+                  ligne dans tes totaux.
+                </>
+              ) : (
+                <>
+                  <strong className="text-foreground">Mode mensuel</strong> : en pratique, mets souvent{' '}
+                  <strong>aujourd’hui</strong> ou la date du tout premier prélèvement / virement. Ça ancre la fiche dans le
+                  temps ; le jour du mois qui compte pour les répétitions, c’est surtout le champ « jour du prélèvement »
+                  ci-dessus.
+                </>
+              )}
             </p>
           </div>
 

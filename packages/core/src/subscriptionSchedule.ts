@@ -43,6 +43,42 @@ export function subscriptionAmountForMonth(
   return sub.montant;
 }
 
+/** Dates ISO (YYYY-MM-DD) où a lieu un prélèvement / versement dans ce mois (pour calendrier). */
+export function subscriptionChargesInMonth(
+  sub: FinanceSubscription,
+  year: number,
+  month0: number
+): string[] {
+  if (subscriptionAmountForMonth(sub, year, month0) <= 0) return [];
+
+  const finMs = sub.finLe ? new Date(sub.finLe + "T23:59:59.999").getTime() : Number.POSITIVE_INFINITY;
+  const lastDay = daysInMonth(year, month0);
+
+  if (sub.period === "daily") {
+    const out: string[] = [];
+    for (let d = 1; d <= lastDay; d++) {
+      const noon = new Date(year, month0, d, 12, 0, 0).getTime();
+      if (noon > finMs) continue;
+      out.push(ymd(year, month0, d));
+    }
+    return out;
+  }
+
+  if (sub.period === "yearly") {
+    const { m0: anchorM } = parseYmd(sub.dateDebut);
+    if (month0 !== anchorM) return [];
+    const d = Math.min(sub.jourPrelevement, lastDay);
+    const noon = new Date(year, month0, d, 12, 0, 0).getTime();
+    if (noon > finMs) return [];
+    return [ymd(year, month0, d)];
+  }
+
+  const d = Math.min(sub.jourPrelevement, lastDay);
+  const noon = new Date(year, month0, d, 12, 0, 0).getTime();
+  if (noon > finMs) return [];
+  return [ymd(year, month0, d)];
+}
+
 /**
  * Prochaine date de prélèvement (YYYY-MM-DD) après `ref` (exclusive), ou null.
  */

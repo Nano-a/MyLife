@@ -3,8 +3,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import type { FinanceTransaction, FinanceTxType } from '@mylife/core'
-import { subscriptionAmountForMonth } from '@mylife/core'
+import type { FinanceSubscription, FinanceTransaction, FinanceTxType } from '@mylife/core'
+import { MOIS_COURTS, subscriptionAmountForMonth, subscriptionChargesInMonth } from '@mylife/core'
 import { AnimatedCard } from '@/components/animated-card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -20,7 +20,7 @@ import {
   subscriptionFriendlyCaption,
   type SubscriptionPrefill,
 } from '@/components/views/finance-modals'
-import { FileSpreadsheet, FileText, Plus, Wallet } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Plus, Wallet } from 'lucide-react'
 
 type Tab = 'transactions' | 'budgets' | 'abonnements'
 
@@ -94,6 +94,120 @@ function KpiMini({
     <AnimatedCard className="p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={cn('mt-1 truncate text-lg font-bold', className)}>{value}</p>
+    </AnimatedCard>
+  )
+}
+
+const JOURS_COURTS = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'] as const
+
+function FinanceRecurringCalendar({
+  subs,
+  year,
+  month0,
+  onPrevMonth,
+  onNextMonth,
+}: {
+  subs: FinanceSubscription[]
+  year: number
+  month0: number
+  onPrevMonth: () => void
+  onNextMonth: () => void
+}) {
+  const byDay = useMemo(() => {
+    const m = new Map<string, { debit: number; credit: number }>()
+    for (const sub of subs) {
+      const dates = subscriptionChargesInMonth(sub, year, month0)
+      const chunk = sub.montant
+      const credit = sub.flow === 'credit'
+      for (const iso of dates) {
+        const cur = m.get(iso) ?? { debit: 0, credit: 0 }
+        if (credit) cur.credit += chunk
+        else cur.debit += chunk
+        m.set(iso, cur)
+      }
+    }
+    return m
+  }, [subs, year, month0])
+
+  const dim = new Date(year, month0 + 1, 0).getDate()
+  const startPad = (new Date(year, month0, 1).getDay() + 6) % 7
+  const label = `${MOIS_COURTS[month0]} ${year}`
+  const today = new Date()
+  const isToday = (d: number) =>
+    today.getFullYear() === year && today.getMonth() === month0 && today.getDate() === d
+
+  const cells: (number | null)[] = [...Array(startPad).fill(null), ...Array.from({ length: dim }, (_, i) => i + 1)]
+
+  return (
+    <AnimatedCard className="p-4" delay={90}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-5 w-5 text-primary" />
+          <p className="text-sm font-semibold">Calendrier des prélèvements et revenus fixes</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={onPrevMonth}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-[7.5rem] text-center text-sm font-medium capitalize">{label}</span>
+          <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={onNextMonth}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Basé sur tes fiches « chaque mois / an » (onglet Abonnements). Rouge = sortie, vert = entrée. Les montants sont
+        indicatifs (même logique que les totaux du mois).
+      </p>
+      {subs.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Ajoute un prélèvement ou un revenu fixe pour voir les jours ici.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-7 gap-1 text-center text-[0.65rem] font-medium text-muted-foreground">
+            {JOURS_COURTS.map((j) => (
+              <div key={j}>{j}</div>
+            ))}
+          </div>
+          <div className="mt-1 grid grid-cols-7 gap-1">
+            {cells.map((d, i) => {
+              if (d == null) {
+                return <div key={`e-${i}`} className="aspect-square rounded-lg bg-transparent" />
+              }
+              const iso = `${year}-${String(month0 + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+              const v = byDay.get(iso)
+              const hasDebit = v && v.debit > 0
+              const hasCredit = v && v.credit > 0
+              return (
+                <div
+                  key={iso}
+                  className={cn(
+                    'flex aspect-square flex-col items-center justify-center rounded-lg border border-border/60 p-0.5 text-[0.7rem]',
+                    isToday(d) && 'ring-1 ring-primary'
+                  )}
+                >
+                  <span className="font-medium">{d}</span>
+                  <span className="mt-0.5 flex gap-0.5">
+                    {hasDebit ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-destructive/90" title={`Sorties ~${v!.debit} €`} />
+                    ) : null}
+                    {hasCredit ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-chart-2" title={`Entrées ~${v!.credit} €`} />
+                    ) : null}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-destructive/90" /> Prélèvement / sortie
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-chart-2" /> Revenu fixe
+            </span>
+          </div>
+        </>
+      )}
     </AnimatedCard>
   )
 }
@@ -173,6 +287,9 @@ export function FinancesView() {
   const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6)
   const montantRef = useRef<HTMLInputElement>(null)
   const [subPrefill, setSubPrefill] = useState<SubscriptionPrefill | null>(null)
+  const nowCal = new Date()
+  const [calYear, setCalYear] = useState(nowCal.getFullYear())
+  const [calMonth0, setCalMonth0] = useState(nowCal.getMonth())
 
   const currentMonth = new Date().toISOString().slice(0, 7)
 
@@ -223,14 +340,32 @@ export function FinancesView() {
     }))
   }, [snaps, txs])
 
-  const abonMensuel = useMemo(() => {
+  const abonMensuelDebit = useMemo(() => {
     const [ys, ms] = currentMonth.split('-').map(Number)
-    return subs.reduce((s, sub) => s + subscriptionAmountForMonth(sub, ys!, ms! - 1), 0)
+    return subs
+      .filter((sub) => sub.flow !== 'credit')
+      .reduce((s, sub) => s + subscriptionAmountForMonth(sub, ys!, ms! - 1), 0)
   }, [subs, currentMonth])
-  const abonAnnuel = useMemo(() => {
+  const abonMensuelCredit = useMemo(() => {
+    const [ys, ms] = currentMonth.split('-').map(Number)
+    return subs
+      .filter((sub) => sub.flow === 'credit')
+      .reduce((s, sub) => s + subscriptionAmountForMonth(sub, ys!, ms! - 1), 0)
+  }, [subs, currentMonth])
+  const abonAnnuelDebit = useMemo(() => {
     const y = Number(currentMonth.slice(0, 4))
     let total = 0
     for (const sub of subs) {
+      if (sub.flow === 'credit') continue
+      for (let m0 = 0; m0 < 12; m0++) total += subscriptionAmountForMonth(sub, y, m0)
+    }
+    return total
+  }, [subs, currentMonth])
+  const abonAnnuelCredit = useMemo(() => {
+    const y = Number(currentMonth.slice(0, 4))
+    let total = 0
+    for (const sub of subs) {
+      if (sub.flow !== 'credit') continue
       for (let m0 = 0; m0 < 12; m0++) total += subscriptionAmountForMonth(sub, y, m0)
     }
     return total
@@ -267,7 +402,11 @@ export function FinancesView() {
       <header className="mb-6 flex animate-fade-up flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">Finances</h1>
-          <p className="text-muted-foreground">Transactions, budgets et abonnements (données locales)</p>
+          <p className="text-muted-foreground">
+            Trois idées simples : <strong className="text-foreground/90">mouvements du jour</strong>,{' '}
+            <strong className="text-foreground/90">plafonds</strong> par catégorie,{' '}
+            <strong className="text-foreground/90">montants qui se répètent</strong> (sorties ou entrées).
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => setSoldeOpen(true)}>
@@ -309,7 +448,19 @@ export function FinancesView() {
             }}
           >
             <Plus className="h-4 w-4" />
-            Transaction
+            Mouvement du jour
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5 rounded-xl"
+            onClick={() => {
+              setSubPrefill(null)
+              setAddSubOpen(true)
+            }}
+          >
+            <CalendarDays className="h-4 w-4" />
+            Chaque mois
           </Button>
         </div>
       </header>
@@ -326,6 +477,26 @@ export function FinancesView() {
         />
         <KpiMini label="Dépenses / mois" value={`${depMois.toLocaleString('fr-FR')} €`} className="text-destructive" />
         <KpiMini label="Revenus / mois" value={`${revMois.toLocaleString('fr-FR')} €`} className="text-chart-2" />
+      </div>
+
+      <div className="mb-6">
+        <FinanceRecurringCalendar
+          subs={subs}
+          year={calYear}
+          month0={calMonth0}
+          onPrevMonth={() => {
+            if (calMonth0 === 0) {
+              setCalMonth0(11)
+              setCalYear((y) => y - 1)
+            } else setCalMonth0((m) => m - 1)
+          }}
+          onNextMonth={() => {
+            if (calMonth0 === 11) {
+              setCalMonth0(0)
+              setCalYear((y) => y + 1)
+            } else setCalMonth0((m) => m + 1)
+          }}
+        />
       </div>
 
       {balanceDualSeries.length >= 2 && (
@@ -418,6 +589,30 @@ export function FinancesView() {
           </button>
         ))}
       </div>
+
+      {tab === 'transactions' && (
+        <p className="mb-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+          <strong className="text-foreground">Transactions</strong> : tout ce que tu enregistres à la main, jour par jour
+          (courses, salaire ponctuel, etc.). Ça alimente l’historique et les graphiques ; ce n’est pas la même chose que
+          les fiches « chaque mois » du calendrier, qui se répètent toutes seules.
+        </p>
+      )}
+
+      {tab === 'budgets' && (
+        <p className="mb-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+          <strong className="text-foreground">Budgets</strong> : tu fixes un <em>plafond mensuel</em> par type de dépense
+          (ex. 300 € alimentation). L’app compare avec tes <strong>dépenses</strong> enregistrées en transactions pour ce
+          mois-ci et te montre si tu es en dessous ou au-dessus.
+        </p>
+      )}
+
+      {tab === 'abonnements' && (
+        <p className="mb-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+          <strong className="text-foreground">Abonnements</strong> : prélèvements <em>et</em> revenus fixes (même
+          montant, mêmes dates). Tu ne les retapes pas chaque mois ; ils apparaissent dans le calendrier ci-dessus et dans
+          les totaux « engagé ce mois ».
+        </p>
+      )}
 
       {tab === 'transactions' && (
         <div className="space-y-3">
@@ -538,21 +733,52 @@ export function FinancesView() {
 
       {tab === 'abonnements' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button size="sm" className="rounded-xl" onClick={() => setAddSubOpen(true)}>
-              + Prélèvement auto (une saisie)
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              onClick={() => {
+                setSubPrefill({ flow: 'credit' })
+                setAddSubOpen(true)
+              }}
+            >
+              + Revenu chaque mois
+            </Button>
+            <Button
+              size="sm"
+              className="rounded-xl"
+              onClick={() => {
+                setSubPrefill(null)
+                setAddSubOpen(true)
+              }}
+            >
+              + Prélèvement chaque mois
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Tu décris le prélèvement <strong>une fois</strong> (montant, jour, mois, durée). Les mois suivants sont
-            déduits tout seuls — inutile de ressaisir « SFR » ou « SNCF » chaque mois.
+            Tu remplis la fiche <strong>une fois</strong> (montant, jour, mois). Les mois suivants sont calculés tout
+            seuls — plus besoin de ressaisir « SFR », « salaire » ou « SNCF » à la main.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <KpiMini
-              label="Engagé ce mois-ci"
-              value={`${Math.round(abonMensuel).toLocaleString('fr-FR')} €`}
+              label="Prélèvements ce mois"
+              value={`${Math.round(abonMensuelDebit).toLocaleString('fr-FR')} €`}
+              className="text-destructive"
             />
-            <KpiMini label="Sur l’année" value={`${Math.round(abonAnnuel).toLocaleString('fr-FR')} €`} />
+            <KpiMini
+              label="Revenus fixes ce mois"
+              value={`${Math.round(abonMensuelCredit).toLocaleString('fr-FR')} €`}
+              className="text-chart-2"
+            />
+            <KpiMini
+              label="Prélèvements / an"
+              value={`${Math.round(abonAnnuelDebit).toLocaleString('fr-FR')} €`}
+            />
+            <KpiMini
+              label="Revenus fixes / an"
+              value={`${Math.round(abonAnnuelCredit).toLocaleString('fr-FR')} €`}
+            />
           </div>
           {subs.length === 0 ? (
             <EmptyFin
@@ -565,7 +791,7 @@ export function FinancesView() {
                 return (
                   <li key={sub.id}>
                     <AnimatedCard className="flex items-center gap-3 px-4 py-3">
-                      <span className="text-xl">🔄</span>
+                      <span className="text-xl">{sub.flow === 'credit' ? '💰' : '🔄'}</span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{sub.libelle}</p>
                         <p className="text-sm font-medium text-foreground">
