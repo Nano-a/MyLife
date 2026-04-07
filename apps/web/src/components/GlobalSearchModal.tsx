@@ -96,7 +96,19 @@ export function GlobalSearchModal({ open, onClose }: { open: boolean; onClose: (
         onChange={(e) => setQ(e.target.value)}
       />
       {q.trim().length < 2 ? (
-        <p className="text-sm text-muted">2 caractères minimum.</p>
+        <p className="text-sm text-muted">
+          2 caractères minimum. Accès direct :{" "}
+          <button
+            type="button"
+            className="text-accent underline"
+            onClick={() => {
+              onClose();
+              navigate("/app/carnet");
+            }}
+          >
+            Carnet de vie
+          </button>
+        </p>
       ) : results.length === 0 ? (
         <p className="text-sm text-muted">Aucun résultat</p>
       ) : (

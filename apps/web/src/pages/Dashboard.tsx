@@ -16,6 +16,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Bell,
+  BookMarked,
   Calendar,
   CheckCircle2,
   Dumbbell,
@@ -67,6 +68,7 @@ function completionStreak(
 }
 
 const MODULES = [
+  { to: "/app/carnet", label: "Carnet", desc: "Historique jour par jour · PDF", icon: BookMarked, iconClass: "icon-objectifs" },
   { to: "/app/agenda", label: "Agenda", desc: "Événements et rappels", icon: Calendar, iconClass: "icon-agenda" },
   { to: "/app/habitudes", label: "Habitudes", desc: "Suivi quotidien", icon: CheckCircle2, iconClass: "icon-habitudes" },
   { to: "/app/sport", label: "Sport", desc: "Séances d’entraînement", icon: Dumbbell, iconClass: "icon-sport" },

@@ -360,6 +360,28 @@ button:active, a:active {
   animation: ripple 500ms ease-out forwards;
 }
 
+/* ─── Impression depuis le Carnet de vie ─────────────────────── */
+@media print {
+  html[data-print-journal="1"] body * {
+    visibility: hidden;
+  }
+  html[data-print-journal="1"] #carnet-print-area,
+  html[data-print-journal="1"] #carnet-print-area * {
+    visibility: visible;
+  }
+  html[data-print-journal="1"] #carnet-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    border: none !important;
+    background: #fff !important;
+    color: #111 !important;
+    box-shadow: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

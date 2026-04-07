@@ -27,3 +27,15 @@ export function formatFrDate(iso: string): string {
     month: "short",
   });
 }
+
+/** Ex. « dimanche 5 avril 2026 » — pour titres et exports. */
+export function formatFrDateLong(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}

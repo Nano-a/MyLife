@@ -14,6 +14,7 @@ const FinancePage = lazy(() => import("./pages/FinancePage").then((m) => ({ defa
 const GoalsPage = lazy(() => import("./pages/GoalsPage").then((m) => ({ default: m.GoalsPage })));
 const NotesPage = lazy(() => import("./pages/NotesPage").then((m) => ({ default: m.NotesPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const DayJournalPage = lazy(() => import("./pages/DayJournalPage").then((m) => ({ default: m.DayJournalPage })));
 
 function PageFallback() {
   return (
@@ -108,6 +109,14 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <SettingsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="carnet"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <DayJournalPage />
               </Suspense>
             }
           />

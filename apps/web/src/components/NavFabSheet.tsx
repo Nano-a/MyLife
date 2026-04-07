@@ -1,8 +1,9 @@
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, Dumbbell, FileText, Target } from "lucide-react";
+import { BookMarked, CheckCircle2, Dumbbell, FileText, Target } from "lucide-react";
 import { Modal } from "./Modal";
 
 const FAB_DESTINATIONS = [
+  { to: "/app/carnet", label: "Carnet", desc: "Historique & PDF", Icon: BookMarked, iconClass: "icon-objectifs" },
   { to: "/app/habitudes", label: "Habitudes", desc: "Eau, routines", Icon: CheckCircle2, iconClass: "icon-habitudes" },
   { to: "/app/sport", label: "Sport", desc: "Séances & stats", Icon: Dumbbell, iconClass: "icon-sport" },
   { to: "/app/objectifs", label: "Objectifs", desc: "Suivi des buts", Icon: Target, iconClass: "icon-objectifs" },

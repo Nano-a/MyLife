@@ -13,7 +13,7 @@ const PRIMARY_RIGHT = [
   { to: "/app/parametres", label: "Réglages", Icon: Settings },
 ] as const;
 
-const FAB_PREFIXES = ["/app/habitudes", "/app/sport", "/app/objectifs", "/app/notes"] as const;
+const FAB_PREFIXES = ["/app/habitudes", "/app/sport", "/app/objectifs", "/app/notes", "/app/carnet"] as const;
 
 function DockLink({
   to,
