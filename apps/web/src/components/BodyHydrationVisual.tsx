@@ -7,9 +7,12 @@ import { useId } from "react";
 export function BodyHydrationVisual({
   percent,
   className = "",
+  subtitle = "hydratation",
 }: {
   percent: number;
   className?: string;
+  /** Texte sous le pourcentage (ex. « guérison (12 mois) ») */
+  subtitle?: string;
 }) {
   const uid = useId().replace(/:/g, "");
   const clipId = `sil-clip-${uid}`;
@@ -60,7 +63,7 @@ export function BodyHydrationVisual({
         <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>
           {Math.round(p)}%
         </p>
-        <p className="text-[0.65rem] uppercase tracking-wide text-muted">régularité</p>
+        <p className="text-[0.65rem] uppercase tracking-wide text-muted">{subtitle}</p>
       </div>
     </div>
   );

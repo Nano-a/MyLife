@@ -145,6 +145,24 @@ export class MyLifeDB extends Dexie {
         hydrationDays: "date",
         moodDays: "date",
       });
+
+    this.version(5).stores({
+      settings: "key",
+      habits: "id, createdAt, archived",
+      habitCompletions: "id, habitId, date",
+      events: "id, debut, fin",
+      sportSessions: "id, debut, templateId",
+      sportTemplates: "id, createdAt",
+      transactions: "id, date, type",
+      balanceSnapshots: "id, date",
+      budgets: "id, categorie",
+      subscriptions: "id, createdAt",
+      objectives: "id, status, createdAt",
+      noteFolders: "id, parentId, createdAt",
+      notes: "id, updatedAt, epingle, dossierId",
+      hydrationDays: "date",
+      moodDays: "date",
+    });
   }
 }
 

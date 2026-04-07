@@ -59,6 +59,10 @@ export interface AppPreferences {
   dndEnd?: string;
   /** Son des notifications navigateur */
   notifSoundId?: "defaut" | "goutte" | "bip" | "aucun";
+  /** Fond d’écran appliqué (data URL JPEG, après validation) */
+  wallpaperDataUrl?: string;
+  /** Image en attente de validation sur l’accueil (bloque l’app jusqu’à accepter / refuser) */
+  wallpaperPendingDataUrl?: string;
 }
 
 /* ══════════ HABITUDES ══════════ */
@@ -73,15 +77,26 @@ export interface Habit {
   type: HabitType;
   frequence: HabitFrequency;
   joursSemaine?: number[]; // 0=dim
+  /** Premier rappel ce jour (HH:MM), dans la fenêtre ci-dessous */
   heureRappel?: string;
+  /** Fenêtre pendant laquelle l’habitude doit être faite (rappels) */
+  rappelFenetreDebut?: string;
+  rappelFenetreFin?: string;
+  /** Tant que tu n’as pas ouvert l’app et répondu (fait / pas fait + motif), renvoyer des notifications */
+  notifJusquaResolution?: boolean;
   categorie: string;
   objectifQuantite?: number;
   uniteQuantite?: string;
   /** Lien optionnel vers un objectif (suivi croisé) */
   linkedObjectiveId?: string;
+  /** Lien optionnel vers un événement d’agenda */
+  linkedEventId?: string;
   archived?: boolean;
   createdAt: number;
 }
+
+/** Motif quand l’habitude n’est pas faite (couleur sur le diagramme) */
+export type HabitSkipKind = "legitime" | "excuse";
 
 export interface HabitCompletion {
   habitId: string;
@@ -89,6 +104,10 @@ export interface HabitCompletion {
   fait: boolean;
   valeur?: number;
   note?: string;
+  /** Texte libre si l’utilisateur déclare ne pas faire l’habitude */
+  skipReason?: string;
+  /** Orange = plus fort que moi (ex. malade) · Rouge = pas une excuse (ex. flemme) */
+  skipKind?: HabitSkipKind;
 }
 
 /* ══════════ AGENDA ══════════ */

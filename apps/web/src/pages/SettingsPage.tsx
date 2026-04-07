@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useThemePrefs } from "../theme/ThemeProvider";
+import { imageFileToDataUrl } from "../lib/wallpaperImage";
 import { getProfile, saveProfile, wipeAllLocalData } from "../db";
 import { ensureSeedData } from "../initDb";
 import type { UserProfile, ThemeId, ActivityLevel, Sex, DndPeriod } from "@mylife/core";
@@ -363,6 +365,8 @@ export function SettingsPage() {
         </select>
       </section>
 
+      <WallpaperSettingsSection />
+
       <NotifScheduleSection />
 
       <section className="space-y-3 rounded-2xl elevated-surface p-4">
@@ -575,6 +579,97 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="text-xs text-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Fond d’écran (galerie / appareil photo → aperçu bloquant sur l’accueil)
+══════════════════════════════════════════════════════════════════════════ */
+function WallpaperSettingsSection() {
+  const { prefs, setPrefs } = useThemePrefs();
+  const navigate = useNavigate();
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(f: File | undefined) {
+    if (!f?.type.startsWith("image/")) {
+      toast.info("Choisis une image.");
+      return;
+    }
+    try {
+      const url = await imageFileToDataUrl(f);
+      await setPrefs({ wallpaperPendingDataUrl: url });
+      navigate("/app/accueil");
+      toast.ok("Valide ou refuse l’aperçu sur l’accueil.");
+    } catch {
+      toast.info("Impossible de traiter cette image.");
+    }
+  }
+
+  return (
+    <section className="space-y-3 rounded-2xl elevated-surface p-4">
+      <h2 className="font-semibold">Fond d’écran</h2>
+      <p className="text-xs text-muted leading-relaxed">
+        Choisis une photo (galerie ou appareil photo sur téléphone). Tu seras renvoyé·e sur l’accueil : l’écran sera
+        bloqué jusqu’à ce que tu acceptes ou refuses le rendu. Tu peux aussi fermer l’onglet pour quitter sans valider.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium hover:border-accent active:scale-[0.99]"
+          onClick={() => cameraRef.current?.click()}
+        >
+          Appareil photo
+        </button>
+        <button
+          type="button"
+          className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium hover:border-accent active:scale-[0.99]"
+          onClick={() => galleryRef.current?.click()}
+        >
+          Galerie
+        </button>
+      </div>
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          void handleFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          void handleFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      {prefs.wallpaperDataUrl ? (
+        <div className="rounded-xl border border-border bg-[var(--surface)] p-3">
+          <p className="text-xs text-muted mb-2">Aperçu du fond actuel</p>
+          <img
+            src={prefs.wallpaperDataUrl}
+            alt=""
+            className="max-h-40 w-full rounded-lg object-cover object-center"
+          />
+          <button
+            type="button"
+            className="mt-3 w-full rounded-xl border border-border py-2 text-sm text-muted hover:border-[var(--red)] hover:text-[var(--red)]"
+            onClick={() => void setPrefs({ wallpaperDataUrl: undefined })}
+          >
+            Retirer le fond d’écran
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-muted">Aucun fond personnalisé pour l’instant.</p>
+      )}
+    </section>
   );
 }
 

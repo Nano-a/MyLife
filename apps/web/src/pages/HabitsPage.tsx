@@ -1,15 +1,17 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { db } from "../db";
 import type { Habit, HabitCompletion } from "@mylife/core";
 import { computeDayScore } from "@mylife/core";
-import { todayISO } from "../lib/dateUtils";
+import { dateISOFromTimestamp, formatFrDate, todayISO } from "../lib/dateUtils";
+import { buildHabitStackSeries } from "../lib/habitDiagram";
 import { habitsDueToday } from "../lib/habitsDue";
 import { HydrationSection } from "../components/HydrationSection";
+import { HabitSkipModal } from "../components/HabitSkipModal";
 import { Modal } from "../components/Modal";
 import { toast } from "../lib/toastStore";
 
-type HabitTab = "aujourdhui" | "toutes" | "archives";
+type HabitTab = "aujourdhui" | "toutes" | "archives" | "diagramme";
 
 /* ═══════════════════════════════════════ Page principale ════════════════ */
 export function HabitsPage() {
@@ -24,6 +26,7 @@ export function HabitsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editHabit, setEditHabit] = useState<Habit | null>(null);
   const [statsHabit, setStatsHabit] = useState<Habit | null>(null);
+  const [skipHabit, setSkipHabit] = useState<Habit | null>(null);
   const nomRef = useRef<HTMLInputElement>(null);
 
   const dow   = new Date().getDay();
@@ -35,24 +38,34 @@ export function HabitsPage() {
     completions.some((c) => c.id === `${h.id}_${date}` && c.fait)).length;
 
   /* ── Ajouter ── */
-  async function addHabit(
-    nom: string,
-    icone: string,
-    couleur: string,
-    frequence: Habit["frequence"],
-    jours?: number[],
-    linkedObjectiveId?: string
-  ) {
+  async function addHabit(payload: {
+    nom: string;
+    icone: string;
+    couleur: string;
+    frequence: Habit["frequence"];
+    jours?: number[];
+    linkedObjectiveId?: string;
+    linkedEventId?: string;
+    rappelFenetreDebut: string;
+    rappelFenetreFin: string;
+    heureRappel: string;
+    notifJusquaResolution: boolean;
+  }) {
     const h: Habit = {
       id: crypto.randomUUID(),
-      nom: nom.trim(),
-      icone,
-      couleur,
+      nom: payload.nom.trim(),
+      icone: payload.icone,
+      couleur: payload.couleur,
       type: "oui_non",
-      frequence,
-      joursSemaine: frequence === "jours_specifiques" ? jours : undefined,
+      frequence: payload.frequence,
+      joursSemaine: payload.frequence === "jours_specifiques" ? payload.jours : undefined,
       categorie: "perso",
-      linkedObjectiveId: linkedObjectiveId || undefined,
+      linkedObjectiveId: payload.linkedObjectiveId || undefined,
+      linkedEventId: payload.linkedEventId || undefined,
+      rappelFenetreDebut: payload.rappelFenetreDebut,
+      rappelFenetreFin: payload.rappelFenetreFin,
+      heureRappel: payload.heureRappel,
+      notifJusquaResolution: payload.notifJusquaResolution,
       createdAt: Date.now(),
     };
     await db.habits.add(h);
@@ -91,7 +104,13 @@ export function HabitsPage() {
     if (next) toast.ok(`${h.icone} ${h.nom} — fait !`);
   }
 
-  const displayedHabits = tab === "toutes" ? active : tab === "archives" ? archived : due;
+  const diagramSeries = useMemo(
+    () => buildHabitStackSeries(habits, allCompletions, 21),
+    [habits, allCompletions]
+  );
+  const maxDiagramDue = Math.max(...diagramSeries.map((d) => d.totalDue), 1);
+
+  const displayedHabits = tab === "toutes" ? active : tab === "archives" ? archived : tab === "diagramme" ? [] : due;
 
   return (
     <div className="space-y-5">
@@ -125,25 +144,73 @@ export function HabitsPage() {
       </div>
 
       {/* Onglets */}
-      <div className="flex gap-1 rounded-xl elevated-surface p-1">
-        {([["aujourdhui","Aujourd'hui"],["toutes","Toutes"],["archives","Archives"]] as [HabitTab,string][]).map(([t,l]) => (
+      <div className="flex flex-wrap gap-1 rounded-xl elevated-surface p-1">
+        {([["aujourdhui","Aujourd'hui"],["toutes","Toutes"],["diagramme","Diagramme"],["archives","Archives"]] as [HabitTab,string][]).map(([t,l]) => (
           <button key={t} type="button" onClick={() => setTab(t)}
-            className={["flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors",
+            className={["min-w-0 flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors",
               tab === t ? "bg-accent text-white" : "text-muted hover:text-[var(--text)]"].join(" ")}>
             {l}
           </button>
         ))}
       </div>
 
+      {tab === "diagramme" && (
+        <div className="space-y-4 rounded-2xl elevated-surface p-4">
+          <div>
+            <p className="font-semibold">Diagramme (21 jours)</p>
+            <p className="mt-1 text-xs text-muted">
+              Chaque colonne = habitudes prévues ce jour. Vert = fait · Orange = pas fait, motif légitime · Rouge = excuse · Gris = pas encore répondu.
+            </p>
+          </div>
+          <div className="flex h-[200px] gap-1">
+            {diagramSeries.map((day) => {
+              const colH = day.totalDue > 0 ? (day.totalDue / maxDiagramDue) * 100 : 8;
+              return (
+                <div key={day.date} className="flex min-w-0 flex-1 h-full flex-col justify-end gap-1" title={formatFrDate(day.date)}>
+                  <div
+                    className="flex w-full min-h-[6px] flex-col overflow-hidden rounded-t bg-[var(--border)]"
+                    style={{ height: `${Math.max(colH, 8)}%` }}
+                  >
+                    {day.totalDue === 0 ? null : (
+                      <>
+                        {day.excuse > 0 && (
+                          <div className="min-h-[2px] w-full shrink-0 bg-red-600" style={{ flex: day.excuse }} />
+                        )}
+                        {day.legitime > 0 && (
+                          <div className="min-h-[2px] w-full shrink-0 bg-amber-600" style={{ flex: day.legitime }} />
+                        )}
+                        {day.pending > 0 && (
+                          <div className="min-h-[2px] w-full shrink-0 bg-zinc-500/40" style={{ flex: day.pending }} />
+                        )}
+                        {day.done > 0 && (
+                          <div className="min-h-[2px] w-full shrink-0 bg-accent" style={{ flex: day.done }} />
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[0.55rem] text-muted leading-none">{day.date.slice(8)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs text-muted">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-accent" /> Fait</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-zinc-500/50" /> En attente</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-amber-600" /> Légitime</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-red-600" /> Excuse</span>
+          </div>
+        </div>
+      )}
+
       {/* Liste */}
-      {displayedHabits.length === 0 ? (
+      {tab !== "diagramme" && displayedHabits.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-8 text-center">
           <p className="text-2xl">✨</p>
           <p className="mt-2 text-sm text-muted">
             {tab === "archives" ? "Aucune habitude archivée." : "Aucune habitude — crée-en une avec le bouton +"}
           </p>
         </div>
-      ) : (
+      ) : tab !== "diagramme" ? (
         <ul className="space-y-2">
           {displayedHabits.map((h) => {
             const cid  = `${h.id}_${date}`;
@@ -160,6 +227,7 @@ export function HabitsPage() {
                 showToggle={tab === "aujourdhui"}
                 showArchived={tab === "archives"}
                 onToggle={() => void toggle(h)}
+                onSkip={() => setSkipHabit(h)}
                 onEdit={() => setEditHabit(h)}
                 onStats={() => setStatsHabit(h)}
                 onArchive={() => void toggleArchive(h)}
@@ -168,7 +236,7 @@ export function HabitsPage() {
             );
           })}
         </ul>
-      )}
+      ) : null}
 
       {/* Modals */}
       <AddHabitModal
@@ -176,7 +244,7 @@ export function HabitsPage() {
         onClose={() => setAddOpen(false)}
         nomRef={nomRef}
         objectives={objectives}
-        onAdd={addHabit}
+        onAdd={(p) => void addHabit(p)}
       />
       {editHabit && (
         <EditHabitModal
@@ -189,6 +257,7 @@ export function HabitsPage() {
       {statsHabit && (
         <HabitStatsModal habit={statsHabit} completions={allCompletions} onClose={() => setStatsHabit(null)} />
       )}
+      <HabitSkipModal habit={skipHabit} open={Boolean(skipHabit)} onClose={() => setSkipHabit(null)} />
     </div>
   );
 }
@@ -196,11 +265,11 @@ export function HabitsPage() {
 /* ═══════════ Ligne habitude ════════════════════════════════════════════ */
 function HabitRow({
   habit, done, streak, showToggle, showArchived,
-  onToggle, onEdit, onStats, onArchive, onDelete,
+  onToggle, onSkip, onEdit, onStats, onArchive, onDelete,
 }: {
   habit: Habit; done: boolean; streak: number;
   showToggle: boolean; showArchived: boolean;
-  onToggle: () => void; onEdit: () => void; onStats: () => void;
+  onToggle: () => void; onSkip: () => void; onEdit: () => void; onStats: () => void;
   onArchive: () => void; onDelete: () => void;
 }) {
   const [pop, setPop] = useState(false);
@@ -231,16 +300,32 @@ function HabitRow({
 
       <span className="text-xl leading-none shrink-0" aria-hidden>{habit.icone}</span>
 
-      <button type="button" onClick={onStats} className="flex-1 text-left">
+      <button type="button" onClick={onStats} className="flex-1 min-w-0 text-left">
         <p className={["font-medium leading-tight", done ? "text-muted line-through" : ""].join(" ")}>
           {habit.nom}
         </p>
+        {habit.rappelFenetreDebut && habit.rappelFenetreFin && (
+          <p className="text-[0.65rem] text-muted">
+            Fenêtre {habit.rappelFenetreDebut}–{habit.rappelFenetreFin}
+            {habit.notifJusquaResolution ? " · rappels insistants" : ""}
+          </p>
+        )}
         {streak > 0 && (
           <p className="text-xs text-muted">
             <span className="flame-icon inline-block">🔥</span> {streak} j
           </p>
         )}
       </button>
+
+      {showToggle && !done && (
+        <button
+          type="button"
+          onClick={onSkip}
+          className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-muted hover:border-amber-500/50 hover:text-[var(--text)]"
+        >
+          Pas fait
+        </button>
+      )}
 
       {/* Actions compactes */}
       <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity [li:hover_&]:opacity-100">
@@ -275,21 +360,34 @@ function AddHabitModal({
   onClose: () => void;
   nomRef: React.RefObject<HTMLInputElement | null>;
   objectives: { id: string; titre: string }[];
-  onAdd: (
-    nom: string,
-    icone: string,
-    couleur: string,
-    frequence: Habit["frequence"],
-    jours?: number[],
-    linkedObjectiveId?: string
-  ) => void;
+  onAdd: (payload: {
+    nom: string;
+    icone: string;
+    couleur: string;
+    frequence: Habit["frequence"];
+    jours?: number[];
+    linkedObjectiveId?: string;
+    linkedEventId?: string;
+    rappelFenetreDebut: string;
+    rappelFenetreFin: string;
+    heureRappel: string;
+    notifJusquaResolution: boolean;
+  }) => void;
 }) {
+  const events = useLiveQuery(() => db.events.orderBy("debut").reverse().limit(80).toArray(), []) ?? [];
   const [nom, setNom]         = useState("");
   const [icone, setIcone]     = useState("✅");
   const [couleur, setCouleur] = useState("#7c3aed");
   const [frequence, setFrequence] = useState<Habit["frequence"]>("quotidien");
   const [jours, setJours]     = useState<number[]>([1,2,3,4,5]);
+  const [linkObj, setLinkObj] = useState(false);
   const [linkedObjectiveId, setLinkedObjectiveId] = useState("");
+  const [linkAgenda, setLinkAgenda] = useState(false);
+  const [linkedEventId, setLinkedEventId] = useState("");
+  const [rappelFenetreDebut, setRappelFenetreDebut] = useState("08:00");
+  const [rappelFenetreFin, setRappelFenetreFin] = useState("21:00");
+  const [heureRappel, setHeureRappel] = useState("09:00");
+  const [notifJusquaResolution, setNotifJusquaResolution] = useState(false);
 
   const COULEURS = ["#7c3aed","#2563eb","#059669","#dc2626","#d97706","#db2777","#0891b2","#65a30d"];
   const JOURS_LABELS = ["D","L","M","M","J","V","S"];
@@ -297,8 +395,26 @@ function AddHabitModal({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!nom.trim()) return;
-    onAdd(nom, icone, couleur, frequence, jours, linkedObjectiveId || undefined);
-    setNom(""); setIcone("✅"); setLinkedObjectiveId("");
+    onAdd({
+      nom,
+      icone,
+      couleur,
+      frequence,
+      jours: frequence === "jours_specifiques" ? jours : undefined,
+      linkedObjectiveId: linkObj ? linkedObjectiveId || undefined : undefined,
+      linkedEventId: linkAgenda ? linkedEventId || undefined : undefined,
+      rappelFenetreDebut,
+      rappelFenetreFin,
+      heureRappel,
+      notifJusquaResolution,
+    });
+    setNom("");
+    setIcone("✅");
+    setLinkedObjectiveId("");
+    setLinkedEventId("");
+    setLinkObj(false);
+    setLinkAgenda(false);
+    setNotifJusquaResolution(false);
   }
 
   return (
@@ -358,18 +474,95 @@ function AddHabitModal({
           </div>
         )}
 
+        <div className="rounded-xl border border-border bg-[var(--surface)] p-3 space-y-2">
+          <p className="text-xs font-medium text-muted">Fenêtre du jour (faire l’habitude entre…)</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted">De</span>
+              <input
+                type="time"
+                value={rappelFenetreDebut}
+                onChange={(e) => setRappelFenetreDebut(e.target.value)}
+                className="rounded-lg border border-border bg-[var(--surface)] px-2 py-1.5"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted">à</span>
+              <input
+                type="time"
+                value={rappelFenetreFin}
+                onChange={(e) => setRappelFenetreFin(e.target.value)}
+                className="rounded-lg border border-border bg-[var(--surface)] px-2 py-1.5"
+              />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted">Premier rappel à</span>
+            <input
+              type="time"
+              value={heureRappel}
+              onChange={(e) => setHeureRappel(e.target.value)}
+              className="rounded-lg border border-border bg-[var(--surface)] px-2 py-1.5"
+            />
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={notifJusquaResolution}
+              onChange={(e) => setNotifJusquaResolution(e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              Rappels insistants jusqu’à ce que j’ouvre l’app et que je réponde (fait / pas fait + motif).
+              <span className="block text-xs text-muted">Le navigateur peut toujours fermer la notification ; un nouveau rappel est renvoyé tant que ce n’est pas réglé dans l’app.</span>
+            </span>
+          </label>
+        </div>
+
         <div>
-          <label className="text-xs text-muted">Lier à un objectif (optionnel)</label>
-          <select
-            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
-            value={linkedObjectiveId}
-            onChange={(e) => setLinkedObjectiveId(e.target.value)}
-          >
-            <option value="">— Aucun —</option>
-            {objectives.map((o) => (
-              <option key={o.id} value={o.id}>{o.titre}</option>
-            ))}
-          </select>
+          <p className="text-xs text-muted mb-2">Cette tâche est-elle liée à un objectif ?</p>
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={() => setLinkObj(true)}
+              className={["flex-1 rounded-xl border py-2 text-sm", linkObj ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Oui</button>
+            <button type="button" onClick={() => { setLinkObj(false); setLinkedObjectiveId(""); }}
+              className={["flex-1 rounded-xl border py-2 text-sm", !linkObj ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Non</button>
+          </div>
+          {linkObj && (
+            <select
+              className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+              value={linkedObjectiveId}
+              onChange={(e) => setLinkedObjectiveId(e.target.value)}
+            >
+              <option value="">— Choisir un objectif —</option>
+              {objectives.map((o) => (
+                <option key={o.id} value={o.id}>{o.titre}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs text-muted mb-2">Est-elle liée à un événement d’agenda ?</p>
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={() => setLinkAgenda(true)}
+              className={["flex-1 rounded-xl border py-2 text-sm", linkAgenda ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Oui</button>
+            <button type="button" onClick={() => { setLinkAgenda(false); setLinkedEventId(""); }}
+              className={["flex-1 rounded-xl border py-2 text-sm", !linkAgenda ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Non</button>
+          </div>
+          {linkAgenda && (
+            <select
+              className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm"
+              value={linkedEventId}
+              onChange={(e) => setLinkedEventId(e.target.value)}
+            >
+              <option value="">— Choisir un événement —</option>
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {formatFrDate(dateISOFromTimestamp(ev.debut))} · {ev.titre}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <button type="submit" className="w-full rounded-xl bg-accent py-3 font-semibold text-white active:scale-95">
@@ -385,10 +578,18 @@ function EditHabitModal({
   habit, onClose, onSave,
 }: { habit: Habit; onClose: () => void; onSave: (p: Partial<Habit>) => void }) {
   const objectives = useLiveQuery(() => db.objectives.toArray(), []) ?? [];
+  const events = useLiveQuery(() => db.events.orderBy("debut").reverse().limit(80).toArray(), []) ?? [];
   const [nom, setNom]     = useState(habit.nom);
   const [icone, setIcone] = useState(habit.icone);
   const [couleur, setCouleur] = useState(habit.couleur);
+  const [linkObj, setLinkObj] = useState(Boolean(habit.linkedObjectiveId));
   const [linkedObjectiveId, setLinkedObjectiveId] = useState(habit.linkedObjectiveId ?? "");
+  const [linkAgenda, setLinkAgenda] = useState(Boolean(habit.linkedEventId));
+  const [linkedEventId, setLinkedEventId] = useState(habit.linkedEventId ?? "");
+  const [rappelFenetreDebut, setRappelFenetreDebut] = useState(habit.rappelFenetreDebut ?? "08:00");
+  const [rappelFenetreFin, setRappelFenetreFin] = useState(habit.rappelFenetreFin ?? "21:00");
+  const [heureRappel, setHeureRappel] = useState(habit.heureRappel ?? "09:00");
+  const [notifJusquaResolution, setNotifJusquaResolution] = useState(Boolean(habit.notifJusquaResolution));
   const COULEURS = ["#7c3aed","#2563eb","#059669","#dc2626","#d97706","#db2777","#0891b2","#65a30d"];
 
   return (
@@ -408,19 +609,72 @@ function EditHabitModal({
               style={{ background: c, borderColor: couleur === c ? "var(--text)" : "transparent" }} />
           ))}
         </div>
-        <div>
-          <label className="text-xs text-muted">Objectif lié</label>
-          <select
-            className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
-            value={linkedObjectiveId}
-            onChange={(e) => setLinkedObjectiveId(e.target.value)}
-          >
-            <option value="">— Aucun —</option>
-            {objectives.map((o) => (
-              <option key={o.id} value={o.id}>{o.titre}</option>
-            ))}
-          </select>
+
+        <div className="rounded-xl border border-border bg-[var(--surface)] p-3 space-y-2">
+          <p className="text-xs font-medium text-muted">Fenêtre du jour & rappels</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted">De</span>
+              <input type="time" value={rappelFenetreDebut} onChange={(e) => setRappelFenetreDebut(e.target.value)}
+                className="rounded-lg border border-border bg-[var(--surface)] px-2 py-1.5" />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted">à</span>
+              <input type="time" value={rappelFenetreFin} onChange={(e) => setRappelFenetreFin(e.target.value)}
+                className="rounded-lg border border-border bg-[var(--surface)] px-2 py-1.5" />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted">Premier rappel à</span>
+            <input type="time" value={heureRappel} onChange={(e) => setHeureRappel(e.target.value)}
+              className="rounded-lg border border-border bg-[var(--surface)] px-2 py-1.5" />
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input type="checkbox" checked={notifJusquaResolution} onChange={(e) => setNotifJusquaResolution(e.target.checked)} className="mt-1" />
+            <span>Rappels insistants jusqu’à réponse dans l’app</span>
+          </label>
         </div>
+
+        <div>
+          <p className="text-xs text-muted mb-2">Liée à un objectif ?</p>
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={() => setLinkObj(true)}
+              className={["flex-1 rounded-xl border py-2 text-sm", linkObj ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Oui</button>
+            <button type="button" onClick={() => { setLinkObj(false); setLinkedObjectiveId(""); }}
+              className={["flex-1 rounded-xl border py-2 text-sm", !linkObj ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Non</button>
+          </div>
+          {linkObj && (
+            <select className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
+              value={linkedObjectiveId} onChange={(e) => setLinkedObjectiveId(e.target.value)}>
+              <option value="">— Choisir —</option>
+              {objectives.map((o) => (
+                <option key={o.id} value={o.id}>{o.titre}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs text-muted mb-2">Liée à l’agenda ?</p>
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={() => setLinkAgenda(true)}
+              className={["flex-1 rounded-xl border py-2 text-sm", linkAgenda ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Oui</button>
+            <button type="button" onClick={() => { setLinkAgenda(false); setLinkedEventId(""); }}
+              className={["flex-1 rounded-xl border py-2 text-sm", !linkAgenda ? "border-accent bg-accent/10 text-accent" : "border-border text-muted"].join(" ")}>Non</button>
+          </div>
+          {linkAgenda && (
+            <select className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2 text-sm"
+              value={linkedEventId} onChange={(e) => setLinkedEventId(e.target.value)}>
+              <option value="">— Choisir un événement —</option>
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {formatFrDate(dateISOFromTimestamp(ev.debut))} · {ev.titre}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
         <button type="button"
           onClick={() => {
             if (nom.trim()) {
@@ -428,7 +682,12 @@ function EditHabitModal({
                 nom: nom.trim(),
                 icone,
                 couleur,
-                linkedObjectiveId: linkedObjectiveId || undefined,
+                linkedObjectiveId: linkObj ? linkedObjectiveId || undefined : undefined,
+                linkedEventId: linkAgenda ? linkedEventId || undefined : undefined,
+                rappelFenetreDebut,
+                rappelFenetreFin,
+                heureRappel,
+                notifJusquaResolution,
               });
             }
           }}
@@ -447,16 +706,23 @@ function HabitStatsModal({
   const mine = completions.filter((c) => c.habitId === habit.id);
   const total = mine.length;
   const done  = mine.filter((c) => c.fait).length;
+  const skipsLegit = mine.filter((c) => !c.fait && c.skipKind === "legitime").length;
+  const skipsExcuse = mine.filter((c) => !c.fait && c.skipKind === "excuse").length;
   const rate  = total > 0 ? Math.round((done / total) * 100) : 0;
 
   /* Heatmap 12 semaines (84 jours) */
   const today = new Date();
-  const cells: { date: string; fait: boolean }[] = [];
+  const cells: { date: string; tone: "fait" | "legitime" | "excuse" | "vide" }[] = [];
   for (let i = 83; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const iso = d.toISOString().slice(0, 10);
-    cells.push({ date: iso, fait: mine.some((c) => c.date === iso && c.fait) });
+    const row = mine.find((c) => c.date === iso);
+    let tone: "fait" | "legitime" | "excuse" | "vide" = "vide";
+    if (row?.fait) tone = "fait";
+    else if (row?.skipKind === "legitime") tone = "legitime";
+    else if (row?.skipKind === "excuse") tone = "excuse";
+    cells.push({ date: iso, tone });
   }
 
   /* Streak actuel */
@@ -480,17 +746,36 @@ function HabitStatsModal({
             <p className="text-xs text-muted">Fois complété</p>
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-amber-600/15 p-3 text-center">
+            <p className="text-xl font-bold text-amber-600">{skipsLegit}</p>
+            <p className="text-xs text-muted">Pas fait · légitime</p>
+          </div>
+          <div className="rounded-xl bg-red-600/15 p-3 text-center">
+            <p className="text-xl font-bold text-red-600">{skipsExcuse}</p>
+            <p className="text-xs text-muted">Pas fait · excuse</p>
+          </div>
+        </div>
 
         {/* Heatmap 12 semaines */}
         <div>
           <p className="mb-2 text-sm font-medium">12 dernières semaines</p>
           <div className="grid gap-0.5" style={{ gridTemplateColumns: "repeat(12, 1fr)" }}>
-            {cells.map(({ date, fait }) => (
+            {cells.map(({ date, tone }) => (
               <div
                 key={date}
                 title={date}
                 className="aspect-square rounded-sm transition-all"
-                style={{ background: fait ? habit.couleur : "var(--border)" }}
+                style={{
+                  background:
+                    tone === "fait"
+                      ? habit.couleur
+                      : tone === "legitime"
+                        ? "#d97706"
+                        : tone === "excuse"
+                          ? "#dc2626"
+                          : "var(--border)",
+                }}
               />
             ))}
           </div>

@@ -6,7 +6,8 @@ function timeToMin(t: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-function inNotifWindow(prefs: AppPreferences, now = new Date()): boolean {
+/** Plage globale des notifications (réglages) */
+export function inNotifWindow(prefs: AppPreferences, now = new Date()): boolean {
   const start = prefs.notifWindowStart ?? "07:00";
   const end = prefs.notifWindowEnd ?? "22:00";
   const cur = now.getHours() * 60 + now.getMinutes();
@@ -16,7 +17,8 @@ function inNotifWindow(prefs: AppPreferences, now = new Date()): boolean {
   return cur >= a || cur <= b;
 }
 
-function inAnyDnd(prefs: AppPreferences, now = new Date()): boolean {
+/** Ne pas déranger (réglages) */
+export function inAnyDnd(prefs: AppPreferences, now = new Date()): boolean {
   const periods = prefs.dndPeriods ?? [];
   const cur = now.getHours() * 60 + now.getMinutes();
   for (const p of periods) {

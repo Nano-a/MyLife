@@ -11,6 +11,8 @@ import { GlobalSearchModal } from "./GlobalSearchModal";
 import { OnboardingModal } from "./OnboardingModal";
 import { tickAgendaReminders } from "../lib/notifications";
 import { useThemePrefs } from "../theme/ThemeProvider";
+import { HabitReminderLayer } from "./HabitReminderLayer";
+import { WallpaperPreviewGate } from "./WallpaperPreviewGate";
 
 function OnboardingWithPrefs() {
   const { setPrefs } = useThemePrefs();
@@ -75,39 +77,68 @@ export function AppShell() {
     );
   }
 
-  const showOnboarding = prefs && !prefs.onboardingCompleted;
+  const wallpaperUrl = themePrefs.wallpaperDataUrl;
+  const wallpaperPending = Boolean(themePrefs.wallpaperPendingDataUrl);
+  const showOnboarding = prefs && !prefs.onboardingCompleted && !wallpaperPending;
 
   return (
     <div
       className={[
-        "flex min-h-dvh flex-col pb-[calc(6.75rem+env(safe-area-inset-bottom))]",
-        isLightShell ? "bg-zinc-50 text-zinc-900" : "bg-black text-zinc-100",
+        "relative flex min-h-dvh flex-col",
+        wallpaperPending ? "pb-4" : "pb-[calc(6.75rem+env(safe-area-inset-bottom))]",
+        wallpaperUrl
+          ? "text-zinc-100 [html[data-theme=light]_&]:text-zinc-900"
+          : isLightShell
+            ? "bg-zinc-50 text-zinc-900"
+            : "bg-black text-zinc-100",
       ].join(" ")}
     >
+      {wallpaperUrl && (
+        <>
+          <img
+            src={wallpaperUrl}
+            alt=""
+            className="pointer-events-none fixed inset-0 z-0 h-full w-full object-cover"
+            draggable={false}
+          />
+          <div
+            className="pointer-events-none fixed inset-0 z-[1] bg-black/50 [html[data-theme=light]_&]:bg-white/55"
+            aria-hidden
+          />
+        </>
+      )}
       <a
         href="#main-content"
         className="pointer-events-none fixed left-4 top-4 z-[100] -translate-y-[200%] rounded-xl bg-accent px-4 py-2 text-sm text-white opacity-0 shadow-lg transition-all focus:pointer-events-auto focus:translate-y-0 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/80"
       >
         Aller au contenu
       </a>
-      <button
-        type="button"
-        onClick={() => setSearchOpen(true)}
-        className="fixed right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-white/5 text-lg shadow-lg backdrop-blur-xl hover:border-orange-400/40 hover:bg-white/10 active:scale-95 [html[data-theme=light]_&]:border-black/10 [html[data-theme=light]_&]:bg-white [html[data-theme=light]_&]:shadow-md"
-        aria-label="Recherche globale"
-      >
-        🔍
-      </button>
-      <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {!wallpaperPending && (
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="fixed right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-white/5 text-lg shadow-lg backdrop-blur-xl hover:border-orange-400/40 hover:bg-white/10 active:scale-95 [html[data-theme=light]_&]:border-black/10 [html[data-theme=light]_&]:bg-white [html[data-theme=light]_&]:shadow-md"
+          aria-label="Recherche globale"
+        >
+          🔍
+        </button>
+      )}
+      <GlobalSearchModal open={searchOpen && !wallpaperPending} onClose={() => setSearchOpen(false)} />
       {showOnboarding && <OnboardingWithPrefs />}
-      <main id="main-content" className="mx-auto w-full max-w-3xl flex-1 px-4 py-5 sm:px-5" tabIndex={-1}>
+      <HabitReminderLayer />
+      <main
+        id="main-content"
+        className="relative z-10 mx-auto w-full max-w-3xl flex-1 px-4 py-5 sm:px-5"
+        tabIndex={-1}
+      >
         {/* key force remount → animation à chaque changement de route */}
         <div key={location.pathname} className="page-enter">
           <Outlet />
         </div>
       </main>
-      <TabBar />
+      {!wallpaperPending && <TabBar />}
       <Toaster />
+      <WallpaperPreviewGate />
     </div>
   );
 }
