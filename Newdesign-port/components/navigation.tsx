@@ -29,11 +29,13 @@ const navItems: { tab: NavigationTab; label: string; icon: typeof LayoutDashboar
   { tab: 'settings', label: 'Paramètres', icon: Settings },
 ]
 
+/** Onglets du dock mobile : Accueil, Agenda, Habitudes, Notes, Paramètres (Paramètres toujours accessible). */
+const MOBILE_BOTTOM_TABS: NavigationTab[] = ['dashboard', 'agenda', 'habits', 'notes', 'settings']
+
 export function BottomNavigation() {
   const { currentTab, setCurrentTab } = useStore()
-  
-  // Show only main tabs on mobile bottom nav
-  const mobileNavItems = navItems.slice(0, 5)
+
+  const mobileNavItems = MOBILE_BOTTOM_TABS.map((tab) => navItems.find((i) => i.tab === tab)!)
   
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 glass-strong border-t-0 md:hidden safe-area-bottom rounded-t-3xl">
@@ -127,9 +129,9 @@ export function MobileHeader() {
   const { currentTab, setCurrentTab } = useStore()
   const currentItem = navItems.find((item) => item.tab === currentTab)
   const Icon = currentItem?.icon || LayoutDashboard
-  
-  // Additional tabs for mobile menu
-  const additionalTabs = navItems.slice(5)
+
+  /** Raccourcis en-tête : tout sauf ceux déjà dans la barre du bas. */
+  const additionalTabs = navItems.filter((item) => !MOBILE_BOTTOM_TABS.includes(item.tab))
   
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-strong border-b-0 md:hidden safe-area-top">
@@ -144,8 +146,7 @@ export function MobileHeader() {
           </div>
         </div>
         
-        {/* Additional tabs dropdown */}
-        <div className="flex items-center gap-1">
+        <div className="flex max-w-[50%] items-center justify-end gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {additionalTabs.map(({ tab, icon: TabIcon }) => {
             const isActive = currentTab === tab
             return (
