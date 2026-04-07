@@ -184,17 +184,17 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6 pb-4">
-      <header className="flex items-center justify-between px-1 pt-2">
-        <div>
+      <header className="flex items-center justify-between gap-2 px-1 pt-2">
+        <div className="min-w-0 flex-1">
           <motion.h1
             {...(reduceMotion ? {} : { initial: { opacity: 0, y: -12 }, animate: { opacity: 1, y: 0 } })}
-            className="text-3xl font-bold gradient-text"
+            className="truncate text-2xl font-bold gradient-text sm:text-3xl"
           >
             {appName}
           </motion.h1>
           <p className="mt-1 text-sm capitalize text-kimi-muted">{longDateFr()}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             className="text-kimi-ink grid h-10 w-10 place-items-center rounded-full bg-white/5 opacity-80 transition-colors hover:bg-white/10"

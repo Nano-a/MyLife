@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useThemePrefs } from "../theme/ThemeProvider";
 import { imageFileToDataUrl } from "../lib/wallpaperImage";
 import { getProfile, saveProfile, wipeAllLocalData } from "../db";
@@ -18,6 +18,7 @@ import { registerLocalPasskey, isWebAuthnAvailable } from "../lib/webauthnLocal"
 import { getCloudSyncHint } from "../lib/cloudSyncMeta";
 
 export function SettingsPage() {
+  const location = useLocation();
   const { prefs, setPrefs } = useThemePrefs();
   const signOut = useSessionStore((s) => s.signOut);
   const authMethod = useSessionStore((s) => s.authMethod);
@@ -38,6 +39,14 @@ export function SettingsPage() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (location.hash !== "#fond-ecran") return;
+    const t = window.setTimeout(() => {
+      document.getElementById("fond-ecran")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    return () => window.clearTimeout(t);
+  }, [location.hash, location.pathname]);
 
   async function saveProfil(e?: React.FormEvent) {
     e?.preventDefault();
@@ -607,7 +616,7 @@ function WallpaperSettingsSection() {
   }
 
   return (
-    <section className="space-y-3 rounded-2xl elevated-surface p-4">
+    <section id="fond-ecran" className="scroll-mt-24 space-y-3 rounded-2xl elevated-surface p-4">
       <h2 className="font-semibold">Fond d’écran</h2>
       <p className="text-xs text-muted leading-relaxed">
         Choisis une photo (galerie ou appareil photo sur téléphone). Tu seras renvoyé·e sur l’accueil : l’écran sera

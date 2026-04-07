@@ -128,7 +128,7 @@ export function AppShell() {
       <HabitReminderLayer />
       <main
         id="main-content"
-        className="relative z-10 mx-auto w-full max-w-3xl flex-1 px-4 py-5 sm:px-5"
+        className="relative z-10 mx-auto w-full max-w-3xl flex-1 py-5 pl-4 pr-4 max-sm:pr-[4.75rem] sm:px-5"
         tabIndex={-1}
       >
         {/* key force remount → animation à chaque changement de route */}

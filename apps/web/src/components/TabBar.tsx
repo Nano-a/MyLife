@@ -13,7 +13,14 @@ const PRIMARY_RIGHT = [
   { to: "/app/parametres", label: "Réglages", Icon: Settings },
 ] as const;
 
-const FAB_PREFIXES = ["/app/habitudes", "/app/sport", "/app/objectifs", "/app/notes", "/app/carnet"] as const;
+const FAB_PREFIXES = [
+  "/app/habitudes",
+  "/app/sport",
+  "/app/objectifs",
+  "/app/notes",
+  "/app/carnet",
+  "/app/parametres",
+] as const;
 
 function DockLink({
   to,
@@ -42,7 +49,9 @@ function DockLink({
         ].join(" ")}
         aria-hidden
       />
-      <span className="text-kimi-ink max-w-[4.5rem] truncate">{label}</span>
+      <span className="text-kimi-ink max-w-[5.5rem] truncate text-[0.6rem] leading-tight sm:max-w-[4.5rem] sm:text-[0.65rem]">
+        {label}
+      </span>
     </NavLink>
   );
 }
@@ -74,7 +83,7 @@ export function TabBar() {
             aria-expanded={fabOpen}
             aria-haspopup="dialog"
             aria-controls="nav-fab-sheet"
-            aria-label="Ouvrir le menu : Habitudes, Sport, Objectifs, Notes"
+            aria-label="Menu plus : réglages, fond d’écran, habitudes, sport, objectifs, notes, carnet"
           >
             +
           </button>
