@@ -9,9 +9,12 @@ import { cn } from "@/lib/utils";
 export function BodyHydrationVisual({
   percent,
   className,
+  size = "md",
 }: {
   percent: number;
   className?: string;
+  /** md = défaut ; lg = carte « corps » plus visible */
+  size?: "md" | "lg";
 }) {
   const uid = useId().replace(/:/g, "");
   const clipId = `sil-clip-${uid}`;
@@ -24,9 +27,12 @@ export function BodyHydrationVisual({
   const silhouette =
     "M60 20c-9 0-16 7-16 16s7 16 16 16 16-7 16-16-7-16-16-16zm-24 40h48a4 4 0 014 4l-7 46c-1 7-2 14-2 21v62l-11 34h-12l-11-34v-62c0-7-1-14-2-21l-7-46a4 4 0 014-4z";
 
+  const svgClass = size === "lg" ? "h-72 w-44 md:h-80 md:w-48 drop-shadow-md" : "h-56 w-36 drop-shadow-sm";
+  const pctClass = size === "lg" ? "text-3xl md:text-4xl" : "text-2xl";
+
   return (
     <div className={cn("relative flex flex-col items-center", className)}>
-      <svg viewBox="0 0 120 220" className="h-56 w-36 drop-shadow-sm" aria-hidden>
+      <svg viewBox="0 0 120 220" className={cn(svgClass)} aria-hidden>
         <defs>
           <clipPath id={clipId}>
             <path d={silhouette} />
@@ -58,10 +64,13 @@ export function BodyHydrationVisual({
           strokeLinejoin="round"
         />
       </svg>
-      <div className="mt-1 text-center">
-        <p className="text-2xl font-bold tabular-nums text-primary">{Math.round(p)}%</p>
-        <p className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">
-          régularité
+      <div className="mt-2 text-center">
+        <p className={cn("font-bold tabular-nums text-primary", pctClass)}>{Math.round(p)}%</p>
+        <p className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+          hydratation du corps
+        </p>
+        <p className="mt-0.5 max-w-[14rem] text-[0.65rem] leading-snug text-muted-foreground">
+          Indice de régularité sur ~90 j (pas une mesure médicale)
         </p>
       </div>
     </div>

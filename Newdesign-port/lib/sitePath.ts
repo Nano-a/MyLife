@@ -1,6 +1,10 @@
 /** Préfixe pour déploiement sous sous-chemin (ex. GitHub Pages /MyLife/). Vide en local. */
 export function siteBasePath(): string {
-  return (process.env.NEXT_PUBLIC_BASE_PATH || "").replace(/\/+$/, "");
+  const raw =
+    process.env.NEXT_PUBLIC_BASE_PATH ||
+    (typeof window === "undefined" ? process.env.NEXT_BASE_PATH : "") ||
+    "";
+  return String(raw).replace(/\/+$/, "");
 }
 
 export function publicPath(href: string): string {

@@ -15,20 +15,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'LifeFlow - Suivi de Vie Personnel',
-  description: 'Votre compagnon quotidien pour organiser votre vie, suivre vos habitudes, votre hydratation, vos finances et atteindre vos objectifs.',
+  title: 'MyLife — Suivi de vie personnel',
+  description:
+    'Suivi local : habitudes, hydratation, finances, agenda et objectifs. Données sur votre appareil.',
   generator: 'v0.app',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'LifeFlow',
+    title: 'MyLife',
   },
   icons: {
     icon: [
-      { url: publicPath('/icon-dark-32x32.png'), sizes: '32x32', type: 'image/png' },
-      { url: publicPath('/icon.svg'), type: 'image/svg+xml' },
+      { url: publicPath('/icon'), sizes: '512x512', type: 'image/png' },
+      { url: publicPath('/mylife-pwa.svg'), type: 'image/svg+xml' },
     ],
-    apple: publicPath('/apple-icon.png'),
+    apple: [{ url: publicPath('/apple-icon'), sizes: '180x180', type: 'image/png' }],
   },
 }
 

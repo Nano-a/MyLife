@@ -36,6 +36,19 @@ import {
 
 const QUICK_ML = [150, 250, 330, 500, 750, 1000] as const
 
+function hydrationJourneyHint(index: number): string {
+  if (index >= 88) {
+    return 'Tu es au sommet de l’échelle de l’app : la constance sur le long terme est excellente.'
+  }
+  if (index >= 70) {
+    return 'En gardant le même rythme pendant encore quelques semaines, l’indice peut se rapprocher du maximum.'
+  }
+  if (index >= 45) {
+    return 'L’indice monte surtout quand tu atteins souvent ton objectif sur plusieurs semaines d’affilée.'
+  }
+  return 'Les premières semaines comptent : chaque jour proche de l’objectif fait monter cet indicateur peu à peu.'
+}
+
 export function HydrationView() {
   const date = todayISO()
   const { hydrationGoal, setHydrationGoal, updateHydrationGoalSettings } = useStore()
@@ -78,6 +91,10 @@ export function HydrationView() {
     [bodyIndexSeries90]
   )
   const bodyLabel = useMemo(() => hydrationBodyIndexLabel(bodyIndex), [bodyIndex])
+
+  const last30DailyPct = useMemo(() => bodyIndexSeries90.slice(-30), [bodyIndexSeries90])
+
+  const journeyHint = useMemo(() => hydrationJourneyHint(bodyIndex), [bodyIndex])
 
   const longTerm14 = useMemo(() => {
     if (!profileCore) return 0
@@ -159,9 +176,108 @@ export function HydrationView() {
       <div className="mb-6 animate-fade-up">
         <h1 className="text-2xl md:text-3xl font-bold">Hydratation</h1>
         <p className="text-muted-foreground">
-          Objectif personnalisé (profil + sport) et suivi sur le long terme
+          Objectif du jour, puis <strong className="text-foreground/90">indice d’hydratation du corps</strong> sur
+          plusieurs semaines (régularité, pas mesure médicale).
         </p>
       </div>
+
+      <AnimatedCard delay={50} className="mb-6 border-primary/20 bg-gradient-to-b from-primary/5 to-transparent">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                Sur le long terme
+              </p>
+              <h2 className="mt-1 text-xl font-bold md:text-2xl">Hydratation du corps</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Ce pourcentage résume ta <strong className="text-foreground/90">régularité</strong> sur environ{' '}
+                <strong>90 jours</strong> par rapport à ton objectif (profil, activité, sport). Ce n’est pas la
+                quantité d’eau « dans les organes » — c’est une façon visuelle de voir si tu bois assez souvent
+                comme prévu, jour après jour.
+              </p>
+            </div>
+
+            {!profileCore ? (
+              <p className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                Complète ton <strong className="text-foreground">profil</strong> dans Paramètres pour calculer cet
+                indice et l’objectif personnalisé.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold text-foreground">{bodyLabel.label}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      Indice actuel : <strong className="text-primary">{bodyIndex}</strong> / 100
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{bodyLabel.detail}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{journeyHint}</p>
+                  <div className="mt-4">
+                    <div className="mb-1 flex justify-between text-[0.65rem] text-muted-foreground">
+                      <span>Moins régulier·ère</span>
+                      <span>Très régulier·ère</span>
+                    </div>
+                    <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-chart-2 via-chart-3 to-chart-1 transition-all duration-700"
+                        style={{ width: `${Math.min(100, bodyIndex)}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 flex justify-between text-[0.6rem] tabular-nums text-muted-foreground/80">
+                      <span>0</span>
+                      <span>50</span>
+                      <span>100</span>
+                    </div>
+                  </div>
+                </div>
+
+                {last30DailyPct.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      30 derniers jours — hauteur = % de l’objectif atteint ce jour-là
+                    </p>
+                    <div
+                      className="flex h-14 gap-px sm:gap-0.5"
+                      role="img"
+                      aria-label="Histogramme des 30 derniers jours"
+                    >
+                      {last30DailyPct.map((dayPct, i) => {
+                        const h = Math.min(100, Math.max(0, dayPct))
+                        const isToday = i === last30DailyPct.length - 1
+                        const barH = Math.max(3, Math.round((h / 100) * 56))
+                        return (
+                          <div
+                            key={i}
+                            className="flex min-w-0 flex-1 flex-col justify-end"
+                            title={`Jour ${i + 1}: ${Math.round(h)} %`}
+                          >
+                            <div
+                              className={cn(
+                                'mx-auto w-full max-w-[7px] rounded-t-sm transition-colors',
+                                isToday ? 'bg-primary' : h >= 100 ? 'bg-chart-2' : 'bg-chart-2/55'
+                              )}
+                              style={{ height: barH }}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {profileCore ? (
+            <BodyHydrationVisual percent={bodyIndex} size="lg" className="shrink-0 lg:pt-2" />
+          ) : (
+            <div className="flex h-48 w-full shrink-0 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 lg:w-56">
+              <Droplets className="h-16 w-16 text-muted-foreground/40" />
+            </div>
+          )}
+        </div>
+      </AnimatedCard>
 
       <AnimatedCard delay={100} className="mb-6">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch">
@@ -216,22 +332,6 @@ export function HydrationView() {
               </div>
             </ProgressRing>
           </div>
-        </div>
-      </AnimatedCard>
-
-      <AnimatedCard delay={150} className="mb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Hydratation dans le temps</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Indice sur <strong>90 jours</strong> selon ton objectif (âge, poids, taille, activité,
-              sport du jour). Ce n’est <strong>pas</strong> une mesure médicale — uniquement ta{' '}
-              <strong>régularité</strong>.
-            </p>
-            <p className="mt-3 text-sm font-medium text-primary">{bodyLabel.label}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{bodyLabel.detail}</p>
-          </div>
-          <BodyHydrationVisual percent={bodyIndex} className="shrink-0" />
         </div>
       </AnimatedCard>
 

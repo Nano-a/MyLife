@@ -1,6 +1,6 @@
 'use client'
 
-import type { RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type {
@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import { db } from '@/lib/mylife/db'
 import { cn } from '@/lib/utils'
 
@@ -52,14 +53,55 @@ export const BUDGET_COLORS = [
   '#ea580c',
 ]
 
+/** Texte affiché dans la liste : pas de « prochaine date », focus sur la règle automatique. */
+export function subscriptionFriendlyCaption(sub: FinanceSubscription): string {
+  const j = sub.jourPrelevement
+  if (sub.period === 'daily') {
+    if (sub.moisActifs?.length) {
+      return `Chaque jour, sur les mois que tu as choisis — tout est calculé à partir de cette fiche, sans ressaisie.`
+    }
+    return `Chaque jour — une seule configuration, le total du mois est dérivé automatiquement.`
+  }
+  if (sub.period === 'yearly') {
+    const d = new Date(sub.dateDebut + 'T12:00:00')
+    const monthName = MOIS_COURTS[d.getMonth()]
+    return `Une fois par an en ${monthName}, le ${j}. Reconduit tout seul chaque année${sub.sansFin ? '' : ` jusqu’au ${sub.finLe}`}.`
+  }
+  if (!sub.moisActifs?.length) {
+    return `Chaque mois, le ${j} — comme un forfait : tu ne le retapes pas.`
+  }
+  const labels = [...sub.moisActifs].sort((a, b) => a - b).map((m) => MOIS_COURTS[m])
+  return `Chaque année, les mêmes mois : ${labels.join(', ')}, le ${j}. Ex. transport scolaire (sept.–juin) : une saisie suffit, ça revient chaque année.`
+}
+
+export type SubscriptionPrefill = {
+  libelle?: string
+  montant?: string
+  categorie?: string
+}
+
+function SectionTitle({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[0.65rem] text-primary">
+        {n}
+      </span>
+      {children}
+    </p>
+  )
+}
+
 export function FinanceTxDialog({
   open,
   onClose,
   montantRef: montantRefProp,
+  onSetupAutomaticDebit,
 }: {
   open: boolean
   onClose: () => void
   montantRef?: RefObject<HTMLInputElement | null>
+  /** Propose de basculer vers le prélèvement automatique (une seule config). */
+  onSetupAutomaticDebit?: (payload: { montant: string; libelle: string; categorie: string }) => void
 }) {
   const innerRef = useRef<HTMLInputElement>(null)
   const montantRef = montantRefProp ?? innerRef
@@ -130,7 +172,8 @@ export function FinanceTxDialog({
             ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            Prélèvement récurrent → onglet <strong>Abonnements</strong>.
+            Pour un achat ponctuel aujourd’hui, enregistre ici. Pour quelque chose qui revient tout seul (forfait,
+            loyer…), utilise le bouton ci-dessous : tu ne le resaisiras plus.
           </p>
           <Input
             ref={montantRef}
@@ -174,8 +217,46 @@ export function FinanceTxDialog({
               Dépense superflue (hors besoin essentiel)
             </label>
           )}
+          {type === 'depense' && onSetupAutomaticDebit && (
+            <div
+              className={cn(
+                'rounded-xl border p-3',
+                categorie === 'abonnement' ? 'border-primary/40 bg-primary/10' : 'border-border bg-muted/30'
+              )}
+            >
+              <p className="text-sm font-medium">
+                {categorie === 'abonnement'
+                  ? 'C’est un prélèvement qui revient chaque mois ou chaque année ?'
+                  : 'Ça se répète toujours aux mêmes dates ?'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tu renseignes une fois le montant, le jour et les mois concernés : l’app en déduit les mois suivants
+                (ex. SFR chaque mois, SNCF seulement de septembre à juin, chaque année).
+              </p>
+              <Button
+                type="button"
+                variant={categorie === 'abonnement' ? 'default' : 'secondary'}
+                className="mt-3 w-full"
+                onClick={() => {
+                  const m = montant.replace(',', '.').trim()
+                  if (!m || Number(m) <= 0) {
+                    toast.error('Indique d’abord un montant.')
+                    return
+                  }
+                  onSetupAutomaticDebit({
+                    montant,
+                    libelle: commentaire.trim() || 'Prélèvement',
+                    categorie,
+                  })
+                  onClose()
+                }}
+              >
+                Configurer un prélèvement automatique (recommandé)
+              </Button>
+            </div>
+          )}
           <Button type="submit" className="w-full">
-            Enregistrer
+            Enregistrer cette transaction seulement
           </Button>
         </form>
       </DialogContent>
@@ -186,9 +267,11 @@ export function FinanceTxDialog({
 export function FinanceSubscriptionDialog({
   open,
   onClose,
+  prefill,
 }: {
   open: boolean
   onClose: () => void
+  prefill?: SubscriptionPrefill | null
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const [libelle, setLibelle] = useState('')
@@ -202,6 +285,19 @@ export function FinanceSubscriptionDialog({
   const [sansFin, setSansFin] = useState(true)
   const [finLe, setFinLe] = useState('')
   const [dateDebut, setDateDebut] = useState(today)
+  const prefillAppliedRef = useRef(false)
+
+  useEffect(() => {
+    if (!open) {
+      prefillAppliedRef.current = false
+      return
+    }
+    if (!prefill || prefillAppliedRef.current) return
+    prefillAppliedRef.current = true
+    if (prefill.libelle != null) setLibelle(prefill.libelle)
+    if (prefill.montant != null) setMontant(prefill.montant)
+    if (prefill.categorie != null) setCategorie(prefill.categorie)
+  }, [open, prefill])
 
   function toggleMois(m: number) {
     setMoisSel((prev) => {
@@ -214,7 +310,13 @@ export function FinanceSubscriptionDialog({
 
   function presetScolaire() {
     setTousLesMois(false)
+    setPeriod('monthly')
     setMoisSel(new Set(MOIS_SCOLAIRE))
+  }
+
+  function presetForfaitMobile() {
+    setTousLesMois(true)
+    setPeriod('monthly')
   }
 
   async function submit(e: React.FormEvent) {
@@ -222,9 +324,10 @@ export function FinanceSubscriptionDialog({
     const m = Number(montant.replace(',', '.'))
     if (!libelle.trim() || !m || m <= 0) return
     if (!sansFin && !finLe) return
-    if (!tousLesMois && moisSel.size === 0) return
+    if (period !== 'yearly' && !tousLesMois && moisSel.size === 0) return
 
-    const moisActifs = tousLesMois ? undefined : [...moisSel].sort((a, b) => a - b)
+    const moisActifs =
+      period === 'yearly' ? undefined : tousLesMois ? undefined : [...moisSel].sort((a, b) => a - b)
     const sub: FinanceSubscription = {
       id: crypto.randomUUID(),
       libelle: libelle.trim(),
@@ -240,7 +343,7 @@ export function FinanceSubscriptionDialog({
       createdAt: Date.now(),
     }
     await db.subscriptions.add(sub)
-    toast.success(`Abonnement « ${sub.libelle} » enregistré`)
+    toast.success(`« ${sub.libelle} » enregistré : les prochains mois sont déduits automatiquement.`)
     setLibelle('')
     setMontant('')
     setCommentaire('')
@@ -255,18 +358,25 @@ export function FinanceSubscriptionDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Abonnement récurrent</DialogTitle>
+          <DialogTitle>Prélèvement automatique</DialogTitle>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Tu remplis cette fiche <strong>une seule fois</strong>. L’application réapplique la même règle chaque mois ou
+          chaque année (forfait SFR tous les mois, SNCF septembre–juin chaque année, etc.) — pas besoin de recréer la
+          dépense à la main.
+        </p>
+
+        <form onSubmit={submit} className="space-y-4">
+          <SectionTitle n={1}>Qu’est-ce que c’est ?</SectionTitle>
           <Input
-            placeholder="Libellé (ex. Forfait, SNCF…)"
+            placeholder="Nom (ex. Forfait SFR, Abonnement SNCF…)"
             value={libelle}
             onChange={(e) => setLibelle(e.target.value)}
           />
           <Input
             type="number"
             inputMode="decimal"
-            placeholder="Montant (€)"
+            placeholder="Montant prélevé à chaque fois (€)"
             value={montant}
             onChange={(e) => setMontant(e.target.value)}
             className="text-lg font-semibold"
@@ -289,45 +399,59 @@ export function FinanceSubscriptionDialog({
             ))}
           </div>
           <Input
-            placeholder="Note (optionnel)"
+            placeholder="Note interne (optionnel)"
             value={commentaire}
             onChange={(e) => setCommentaire(e.target.value)}
           />
-          <div>
-            <label className="text-xs text-muted-foreground">Rythme</label>
-            <select
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as SubscriptionBillingPeriod)}
-            >
-              <option value="monthly">Chaque mois (même jour)</option>
-              <option value="yearly">Une fois par an</option>
-              <option value="daily">Chaque jour</option>
-            </select>
-          </div>
-          {period !== 'daily' && (
-            <div>
-              <label className="text-xs text-muted-foreground">Jour du prélèvement (1–31)</label>
+
+          <Separator />
+
+          <SectionTitle n={2}>À quelle fréquence ça se répète ?</SectionTitle>
+          <select
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as SubscriptionBillingPeriod)}
+          >
+            <option value="monthly">Chaque mois (même jour du mois) — idéal forfait, loyer</option>
+            <option value="yearly">Une seule fois par an — même date chaque année</option>
+            <option value="daily">Chaque jour (cas rare)</option>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {period === 'monthly' &&
+              'Ex. 49 € prélevés le 5 de chaque mois : tu ne retapes rien les mois suivants.'}
+            {period === 'yearly' &&
+              'Le mois du prélèvement est celui de l’« échéance de référence » à l’étape 4 (modifie cette date pour changer le mois).'}
+            {period === 'daily' && 'Utile seulement si un montant est prélevé chaque jour.'}
+          </p>
+
+          <Separator />
+
+          <SectionTitle n={3}>Quel jour du mois ?</SectionTitle>
+          {period !== 'daily' ? (
+            <>
+              <label className="text-xs text-muted-foreground">Jour du prélèvement entre le 1 et le 31</label>
               <Input
                 type="number"
                 min={1}
                 max={31}
-                className="mt-1"
                 value={jour}
                 onChange={(e) => setJour(Number(e.target.value) || 1)}
               />
-            </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">Mode « chaque jour » : pas de jour fixe dans le mois.</p>
           )}
-          <div>
-            <label className="text-xs text-muted-foreground">Date de début / référence</label>
-            <Input
-              type="date"
-              className="mt-1"
-              value={dateDebut}
-              onChange={(e) => setDateDebut(e.target.value)}
-            />
-          </div>
-          {period !== 'daily' && (
+
+          <Separator />
+
+          <SectionTitle n={4}>Quels mois de l’année ?</SectionTitle>
+          {period === 'yearly' ? (
+            <p className="text-sm text-muted-foreground">
+              En mode « une fois par an », seul le mois de la date de référence (ci-dessous) compte. Pour un abonnement
+              <strong> plusieurs mois par an</strong> (ex. SNCF de septembre à juin), choisis plutôt « Chaque mois » puis
+              « Certains mois seulement » avec le préréglage scolaire.
+            </p>
+          ) : period === 'daily' ? (
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -338,40 +462,42 @@ export function FinanceSubscriptionDialog({
                 Tous les mois de l’année
               </label>
               {!tousLesMois && (
-                <>
-                  <Button type="button" variant="outline" size="sm" onClick={presetScolaire}>
-                    Préréglage sept. → juin
-                  </Button>
-                  <div className="flex flex-wrap gap-1.5">
-                    {MOIS_COURTS.map((label, m0) => (
-                      <button
-                        key={m0}
-                        type="button"
-                        onClick={() => toggleMois(m0)}
-                        className={cn(
-                          'rounded-lg border px-2 py-1 text-xs',
-                          moisSel.has(m0)
-                            ? 'border-primary bg-primary/15 text-primary'
-                            : 'border-border text-muted-foreground'
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </>
+                <div className="flex flex-wrap gap-1.5">
+                  {MOIS_COURTS.map((label, m0) => (
+                    <button
+                      key={m0}
+                      type="button"
+                      onClick={() => toggleMois(m0)}
+                      className={cn(
+                        'rounded-lg border px-2 py-1 text-xs',
+                        moisSel.has(m0)
+                          ? 'border-primary bg-primary/15 text-primary'
+                          : 'border-border text-muted-foreground'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
-          )}
-          {period === 'daily' && (
-            <div className="space-y-2">
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={presetForfaitMobile}>
+                  Ex. forfait mobile : tous les mois
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={presetScolaire}>
+                  Ex. SNCF / fac : sept. → juin chaque année
+                </Button>
+              </div>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
                   checked={tousLesMois}
                   onChange={(e) => setTousLesMois(e.target.checked)}
                 />
-                Tous les mois
+                Tous les douze mois
               </label>
               {!tousLesMois && (
                 <div className="flex flex-wrap gap-1.5">
@@ -394,15 +520,32 @@ export function FinanceSubscriptionDialog({
               )}
             </div>
           )}
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Échéance de référence (première prise en compte)</label>
+            <Input type="date" className="mt-1" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Sert de point de départ dans le calendrier ; en mode annuel, le <strong>mois</strong> de cette date fixe le
+              mois du prélèvement annuel.
+            </p>
+          </div>
+
+          <Separator />
+
+          <SectionTitle n={5}>Jusqu’à quand ?</SectionTitle>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={sansFin} onChange={(e) => setSansFin(e.target.checked)} />
-            Sans date de fin
+            Pour toujours (ex. forfait tant que je ne résilie pas)
           </label>
           {!sansFin && (
-            <Input type="date" value={finLe} onChange={(e) => setFinLe(e.target.value)} />
+            <>
+              <label className="text-xs text-muted-foreground">Dernier prélèvement possible au plus tard le</label>
+              <Input type="date" value={finLe} onChange={(e) => setFinLe(e.target.value)} />
+            </>
           )}
+
           <Button type="submit" className="w-full">
-            Enregistrer l’abonnement
+            Enregistrer — je ne resaisirai plus ce prélèvement
           </Button>
         </form>
       </DialogContent>

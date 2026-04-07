@@ -4,11 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { FinanceTransaction, FinanceTxType } from '@mylife/core'
-import {
-  describeSubscriptionPeriod,
-  nextChargeDate,
-  subscriptionAmountForMonth,
-} from '@mylife/core'
+import { subscriptionAmountForMonth } from '@mylife/core'
 import { AnimatedCard } from '@/components/animated-card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -21,6 +17,8 @@ import {
   FinanceBudgetDialog,
   FinanceSubscriptionDialog,
   FinanceTxDialog,
+  subscriptionFriendlyCaption,
+  type SubscriptionPrefill,
 } from '@/components/views/finance-modals'
 import { FileSpreadsheet, FileText, Plus, Wallet } from 'lucide-react'
 
@@ -174,6 +172,7 @@ export function FinancesView() {
   const [filterType, setFilterType] = useState<FinanceTxType | ''>('')
   const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6)
   const montantRef = useRef<HTMLInputElement>(null)
+  const [subPrefill, setSubPrefill] = useState<SubscriptionPrefill | null>(null)
 
   const currentMonth = new Date().toISOString().slice(0, 7)
 
@@ -541,12 +540,12 @@ export function FinancesView() {
         <div className="space-y-4">
           <div className="flex justify-end">
             <Button size="sm" className="rounded-xl" onClick={() => setAddSubOpen(true)}>
-              + Abonnement récurrent
+              + Prélèvement auto (une saisie)
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Configure une seule fois (montant, jour, mois concernés, fin ou pour toujours). Les prochains prélèvements
-            sont calculés automatiquement.
+            Tu décris le prélèvement <strong>une fois</strong> (montant, jour, mois, durée). Les mois suivants sont
+            déduits tout seuls — inutile de ressaisir « SFR » ou « SNCF » chaque mois.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <KpiMini
@@ -563,17 +562,17 @@ export function FinancesView() {
           ) : (
             <ul className="space-y-2">
               {subs.map((sub) => {
-                const next = nextChargeDate(sub)
                 return (
                   <li key={sub.id}>
                     <AnimatedCard className="flex items-center gap-3 px-4 py-3">
                       <span className="text-xl">🔄</span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{sub.libelle}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {sub.montant.toLocaleString('fr-FR')} € · {describeSubscriptionPeriod(sub)}
-                          {next && ` · Prochain : ${next}`}
-                          {!next && ' · (terminé ou hors période)'}
+                        <p className="text-sm font-medium text-foreground">
+                          {sub.montant.toLocaleString('fr-FR')} €
+                        </p>
+                        <p className="mt-0.5 text-sm text-muted-foreground leading-snug">
+                          {subscriptionFriendlyCaption(sub)}
                         </p>
                         {sub.commentaire && (
                           <p className="truncate text-xs text-muted-foreground">{sub.commentaire}</p>
@@ -595,8 +594,23 @@ export function FinancesView() {
         </div>
       )}
 
-      <FinanceTxDialog open={addTxOpen} onClose={() => setAddTxOpen(false)} montantRef={montantRef} />
-      <FinanceSubscriptionDialog open={addSubOpen} onClose={() => setAddSubOpen(false)} />
+      <FinanceTxDialog
+        open={addTxOpen}
+        onClose={() => setAddTxOpen(false)}
+        montantRef={montantRef}
+        onSetupAutomaticDebit={(p) => {
+          setSubPrefill(p)
+          setAddSubOpen(true)
+        }}
+      />
+      <FinanceSubscriptionDialog
+        open={addSubOpen}
+        prefill={subPrefill}
+        onClose={() => {
+          setAddSubOpen(false)
+          setSubPrefill(null)
+        }}
+      />
       <FinanceBudgetDialog open={addBudOpen} onClose={() => setAddBudOpen(false)} />
       <FinanceBalanceDialog
         open={soldeOpen}

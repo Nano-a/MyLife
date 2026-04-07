@@ -652,8 +652,25 @@ function AddEventModal({
         </div>
 
         {/* Récurrence */}
+        <div className="rounded-xl border border-border/80 bg-[var(--surface)]/50 p-3 space-y-2">
+          <p className="text-sm font-medium text-[var(--text)]">Répétition automatique</p>
+          <p className="text-xs text-muted">
+            Tu ne recrées pas le même cours chaque semaine : une seule saisie, l’agenda duplique l’événement selon la
+            règle ci-dessous. Pour l’emploi du temps à la fac, choisis « Toutes les semaines » puis la date de fin (ex.
+            dernier jour avant les vacances d’été). Les examens ou jours fériés : ajoute-les à part en ponctuel.
+          </p>
+          <button
+            type="button"
+            className="w-full rounded-lg border border-border py-2 text-xs font-medium text-muted hover:bg-[var(--surface)]"
+            onClick={() => {
+              setRec("weekly");
+            }}
+          >
+            Raccourci : cours / fac — répétition hebdomadaire
+          </button>
+        </div>
         <div>
-          <label className="text-xs text-muted">Répétition</label>
+          <label className="text-xs text-muted">Se répète</label>
           <select
             className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
             value={recurrence} onChange={(e) => setRec(e.target.value as RecurrenceType)}>
@@ -664,12 +681,13 @@ function AddEventModal({
         </div>
         {recurrence !== "once" && (
           <div>
-            <label className="text-xs text-muted">Dernier jour inclus (optionnel)</label>
+            <label className="text-xs text-muted">Dernière occurrence (dernier jour inclus)</label>
             <input type="date"
               className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
               value={recEnd} onChange={(e) => setRecEnd(e.target.value)} />
             <p className="mt-1 text-xs text-muted">
-              Ex. emploi du temps : « Toutes les semaines » puis la date du dernier cours avant les vacances — les répétitions s’arrêtent après ce jour.
+              Indispensable pour un emploi du temps : mets par exemple le vendredi avant les vacances d’été. Après cette
+              date, plus aucune répétition n’est générée — tu n’as pas besoin de supprimer cours par cours.
             </p>
           </div>
         )}
@@ -884,8 +902,12 @@ function EditEventModal({
           </select>
         </div>
 
+        <p className="text-xs text-muted">
+          Une règle de répétition évite de recréer le même créneau chaque semaine ; fixe une date de fin pour couper
+          avant les vacances.
+        </p>
         <div>
-          <label className="text-xs text-muted">Répétition</label>
+          <label className="text-xs text-muted">Se répète</label>
           <select
             className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
             value={recurrence}
@@ -898,7 +920,7 @@ function EditEventModal({
         </div>
         {recurrence !== "once" && (
           <div>
-            <label className="text-xs text-muted">Dernier jour inclus (optionnel)</label>
+            <label className="text-xs text-muted">Dernière occurrence (dernier jour inclus)</label>
             <input
               type="date"
               className="mt-1 w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-2"
