@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
+import { publicPath } from '@/lib/sitePath'
 import './globals.css'
 
 const inter = Inter({ 
@@ -17,7 +18,6 @@ export const metadata: Metadata = {
   title: 'LifeFlow - Suivi de Vie Personnel',
   description: 'Votre compagnon quotidien pour organiser votre vie, suivre vos habitudes, votre hydratation, vos finances et atteindre vos objectifs.',
   generator: 'v0.app',
-  manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -25,10 +25,10 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { url: publicPath('/icon-dark-32x32.png'), sizes: '32x32', type: 'image/png' },
+      { url: publicPath('/icon.svg'), type: 'image/svg+xml' },
     ],
-    apple: '/apple-icon.png',
+    apple: publicPath('/apple-icon.png'),
   },
 }
 

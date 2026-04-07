@@ -4,7 +4,8 @@
   "packageManager": "npm@10.9.2",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "Newdesign-port"
   ],
   "scripts": {
     "build": "turbo run build",

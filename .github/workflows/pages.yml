@@ -1,4 +1,4 @@
-# Déploie apps/web sur GitHub Pages (https://<user>.github.io/<nom-du-repo>/)
+# Déploie Newdesign-port (Next.js export statique) sur GitHub Pages (https://<user>.github.io/<nom-du-repo>/)
 # Après le 1er push : Settings → Pages → Source = GitHub Actions (voir README si l’UI ne montre que des cartes).
 name: GitHub Pages
 
@@ -29,12 +29,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build --workspace=@mylife/core
-      - run: npm run build --workspace=web
+      - run: npm run build --workspace=@mylife/newdesign
         env:
-          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          NEXT_BASE_PATH: /${{ github.event.repository.name }}
+          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/web/dist
+          path: Newdesign-port/out
 
   deploy:
     needs: build
