@@ -191,6 +191,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Permet au calque fixed du fond d’écran d’apparaître (sinon le fond body masque tout). */
+  body:has([data-wallpaper='true']) {
+    background: transparent;
+  }
   html {
     scroll-behavior: smooth;
   }
@@ -230,6 +234,71 @@
     backdrop-filter: blur(16px) saturate(160%);
     -webkit-backdrop-filter: blur(16px) saturate(160%);
     border: 1px solid oklch(0.35 0.03 150 / 0.25);
+  }
+
+  /* Fond d’écran actif : panneaux plus transparents + flou plus fort (effet vitre sur photo, type maquette bambou). */
+  [data-wallpaper='true'] .glass {
+    background: linear-gradient(
+      135deg,
+      oklch(0.08 0.02 150 / 0.32) 0%,
+      oklch(0.06 0.02 150 / 0.26) 100%
+    );
+    backdrop-filter: blur(22px) saturate(165%);
+    -webkit-backdrop-filter: blur(22px) saturate(165%);
+  }
+
+  [data-wallpaper='true'] .glass:hover {
+    /* Bat les utilitaires Tailwind hover:bg-* sur AnimatedCard */
+    background: linear-gradient(
+      135deg,
+      oklch(0.12 0.025 150 / 0.4) 0%,
+      oklch(0.09 0.02 150 / 0.34) 100%
+    ) !important;
+  }
+
+  [data-wallpaper='true'] .glass-strong {
+    background: linear-gradient(
+      135deg,
+      oklch(0.1 0.025 150 / 0.44) 0%,
+      oklch(0.08 0.02 150 / 0.4) 100%
+    );
+    backdrop-filter: blur(32px) saturate(175%);
+    -webkit-backdrop-filter: blur(32px) saturate(175%);
+  }
+
+  [data-wallpaper='true'] .glass-subtle {
+    background: oklch(0.07 0.02 150 / 0.24);
+    backdrop-filter: blur(18px) saturate(155%);
+    -webkit-backdrop-filter: blur(18px) saturate(155%);
+  }
+
+  /* Thème clair + fond d’écran : vitres plus claires */
+  :root:not(.dark):not(.amoled) [data-wallpaper='true'] .glass {
+    background: linear-gradient(
+      135deg,
+      oklch(1 0 0 / 0.38) 0%,
+      oklch(0.96 0.01 250 / 0.3) 100%
+    );
+  }
+
+  :root:not(.dark):not(.amoled) [data-wallpaper='true'] .glass-strong {
+    background: linear-gradient(
+      135deg,
+      oklch(1 0 0 / 0.48) 0%,
+      oklch(0.96 0.01 250 / 0.4) 100%
+    );
+  }
+
+  :root:not(.dark):not(.amoled) [data-wallpaper='true'] .glass-subtle {
+    background: oklch(1 0 0 / 0.32);
+  }
+
+  :root:not(.dark):not(.amoled) [data-wallpaper='true'] .glass:hover {
+    background: linear-gradient(
+      135deg,
+      oklch(1 0 0 / 0.5) 0%,
+      oklch(0.97 0.01 250 / 0.42) 100%
+    );
   }
   
   .glow {
@@ -372,6 +441,12 @@
   border: 1px solid var(--border);
   background: color-mix(in oklch, var(--card) 85%, transparent);
   backdrop-filter: blur(8px);
+}
+
+[data-wallpaper='true'] .elevated-surface {
+  background: color-mix(in oklch, var(--card) 42%, transparent);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
 }
 
 .shadow-float {
