@@ -19,10 +19,13 @@ export function AppShell() {
   const [mounted, setMounted] = useState(false)
   const { currentTab, settings } = useStore()
   
-  // Handle client-side mounting
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.visualStyle = settings.visualStyle
+  }, [settings.visualStyle])
   
   const renderView = () => {
     switch (currentTab) {
@@ -64,6 +67,7 @@ export function AppShell() {
   }
   
   const wallpaper = settings.wallpaper
+  const theme = settings.theme
 
   return (
     <div
@@ -78,9 +82,25 @@ export function AppShell() {
               className="absolute inset-0 bg-cover bg-center bg-no-repeat"
               style={{ backgroundImage: `url("${wallpaper}")` }}
             />
-            {/* Voile léger (maquette type Gemini) : le bambou reste visible, le texte reste lisible */}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/35" />
+            <div
+              className={cn(
+                'absolute inset-0',
+                theme === 'light' &&
+                  'bg-gradient-to-b from-white/25 via-transparent to-slate-300/30',
+                theme === 'amoled' && 'bg-gradient-to-b from-black/45 via-black/20 to-black/55',
+                theme === 'dark' &&
+                  'bg-gradient-to-b from-black/30 via-black/10 to-black/35'
+              )}
+            />
           </>
+        ) : theme === 'light' ? (
+          <>
+            <div className="absolute inset-0 bg-[oklch(0.97_0.008_250)]" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white via-[oklch(0.96_0.012_260)] to-[oklch(0.91_0.02_270)]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-200/40 via-transparent to-transparent" />
+          </>
+        ) : theme === 'amoled' ? (
+          <div className="absolute inset-0 bg-black" />
         ) : (
           <>
             <div className="absolute inset-0 bg-gradient-to-br from-[oklch(0.08_0.03_150)] via-[oklch(0.06_0.02_150)] to-[oklch(0.04_0.015_150)]" />

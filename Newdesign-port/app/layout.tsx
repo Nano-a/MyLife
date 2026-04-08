@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import { publicPath } from '@/lib/sitePath'
 import './globals.css'
+import './visual-styles.css'
 
 const inter = Inter({ 
   subsets: ["latin"],

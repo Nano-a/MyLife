@@ -3,6 +3,18 @@
 export type Theme = 'light' | 'dark' | 'amoled'
 export type AccentColor = 'blue' | 'teal' | 'purple' | 'pink' | 'orange' | 'green'
 
+/** Famille visuelle (indépendante du mode clair / sombre / AMOLED). */
+export type VisualStyle =
+  | 'glassmorphism'
+  | 'flat'
+  | 'material'
+  | 'skeuomorphism'
+  | 'neumorphism'
+  | 'minimalism'
+  | 'dark_mode'
+  | 'brutalism'
+  | 'gradient'
+
 // User Profile
 export interface UserProfile {
   id: string
@@ -19,6 +31,8 @@ export interface UserProfile {
 // Settings
 export interface AppSettings {
   theme: Theme
+  /** Style d’interface (flat, matière, verre, etc.) */
+  visualStyle: VisualStyle
   accentColor: AccentColor
   fontSize: 'small' | 'medium' | 'large'
   pinEnabled: boolean

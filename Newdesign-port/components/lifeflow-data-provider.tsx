@@ -295,6 +295,7 @@ export function LifeFlowDataProvider({ children }: { children: ReactNode }) {
       const uiPatch: Partial<LifeflowUiBlob> = {};
       if (updates.accentColor !== undefined) uiPatch.accentColor = updates.accentColor;
       if (updates.fontSize !== undefined) uiPatch.fontSize = updates.fontSize;
+      if (updates.visualStyle !== undefined) uiPatch.visualStyle = updates.visualStyle;
       if (updates.wallpaper !== undefined) uiPatch.wallpaper = updates.wallpaper;
       if (updates.notifications !== undefined) uiPatch.notifications = updates.notifications;
       if (updates.pinEnabled !== undefined) uiPatch.pinEnabled = updates.pinEnabled;

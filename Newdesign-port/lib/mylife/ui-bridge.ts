@@ -127,6 +127,8 @@ export type LifeflowUiBlob = {
   financeCategories: FinanceCategory[];
   accentColor: AppSettings["accentColor"];
   fontSize: AppSettings["fontSize"];
+  /** Style d’interface (cartes, chrome). Défaut : glassmorphism. */
+  visualStyle?: AppSettings["visualStyle"];
   wallpaper?: string;
   notifications: AppSettings["notifications"];
   hydrationGoal: HydrationGoal;
@@ -138,6 +140,7 @@ export const defaultLifeflowUiBlob = (): LifeflowUiBlob => ({
   financeCategories: DEFAULT_FINANCE_CATEGORIES,
   accentColor: "blue",
   fontSize: "medium",
+  visualStyle: "glassmorphism",
   wallpaper: "/images/background.jpg",
   notifications: {
     enabled: true,
@@ -350,6 +353,7 @@ export function mergeAppSettings(prefs: AppPreferences, ui: LifeflowUiBlob): App
   const notif = ui.notifications;
   return {
     theme: prefsThemeToUi(prefs.theme),
+    visualStyle: ui.visualStyle ?? "glassmorphism",
     accentColor: ui.accentColor,
     fontSize: ui.fontSize,
     pinEnabled: prefs.pinEnabled || ui.pinEnabled,

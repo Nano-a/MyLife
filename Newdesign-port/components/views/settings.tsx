@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { imageFileToDataUrl } from '@/lib/wallpaperImage'
 import { useStore } from '@/lib/store'
-import type { UserProfile as UserProfileType } from '@/lib/types'
+import type { UserProfile as UserProfileType, VisualStyle } from '@/lib/types'
 import { AnimatedCard } from '@/components/animated-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,6 +44,18 @@ const accentColors = [
   { id: 'pink', color: '#ec4899', label: 'Rose' },
   { id: 'orange', color: '#f97316', label: 'Orange' },
   { id: 'green', color: '#22c55e', label: 'Vert' },
+]
+
+const VISUAL_STYLES: { id: VisualStyle; title: string; desc: string }[] = [
+  { id: 'glassmorphism', title: 'Glassmorphism', desc: 'Flou, transparence, effet verre (défaut).' },
+  { id: 'flat', title: 'Flat design', desc: 'Uni, sans ombres ni relief 3D.' },
+  { id: 'material', title: 'Material Design', desc: 'Ombres et profondeur, esprit Android.' },
+  { id: 'skeuomorphism', title: 'Skeuomorphisme', desc: 'Volumes et reflets comme des objets réels.' },
+  { id: 'neumorphism', title: 'Neumorphism', desc: 'Relief doux, ombres intérieures et extérieures.' },
+  { id: 'minimalism', title: 'Minimalisme', desc: 'Épuré, beaucoup d’espace, peu d’ornements.' },
+  { id: 'dark_mode', title: 'Contrastes sombres', desc: 'Panneaux denses ; idéal avec le thème Sombre.' },
+  { id: 'brutalism', title: 'Brutalisme', desc: 'Bords épais, ombre décalée, angles presque droits.' },
+  { id: 'gradient', title: 'Gradient design', desc: 'Dégradés de couleur sur les cartes.' },
 ]
 
 export function SettingsView() {
@@ -445,6 +457,37 @@ export function SettingsView() {
                 <Smartphone className="w-5 h-5" />
                 <span>AMOLED</span>
               </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Le fond de l’app (derrière les cartes) suit ce choix : clair, sombre ou noir OLED.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-1 block">Style d&apos;interface</label>
+            <p className="text-xs text-muted-foreground mb-3">
+              Forme des cartes et du chrome (à combiner avec le thème ci-dessus).
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {VISUAL_STYLES.map(({ id, title, desc }) => {
+                const active = settings.visualStyle === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => updateSettings({ visualStyle: id })}
+                    className={cn(
+                      'rounded-xl border px-3 py-2.5 text-left text-sm transition-all',
+                      active
+                        ? 'border-primary bg-primary/10 ring-1 ring-primary/40'
+                        : 'border-border bg-muted/30 hover:bg-muted/50'
+                    )}
+                  >
+                    <span className="font-semibold text-foreground">{title}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground leading-snug">{desc}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
           
